@@ -175,3 +175,34 @@ func TestCleanupContributionArtifactsRemovesLocalFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestPostJSONReturnsStructuredRetryableError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":     "contribution claim is temporarily unavailable",
+			"code":      "claim_busy",
+			"retryable": true,
+		})
+	}))
+	defer srv.Close()
+
+	err := postJSON(srv.URL, map[string]any{}, nil)
+	if err == nil {
+		t.Fatal("expected structured api error")
+	}
+
+	apiErr, ok := err.(*coordinatorAPIError)
+	if !ok {
+		t.Fatalf("expected coordinatorAPIError, got %T", err)
+	}
+	if apiErr.Code != "claim_busy" {
+		t.Fatalf("expected claim_busy code, got %q", apiErr.Code)
+	}
+	if !apiErr.Retryable {
+		t.Fatal("expected retryable api error")
+	}
+	if !isRetryableClaimErr(err) {
+		t.Fatal("expected claim_busy api error to be retryable")
+	}
+}

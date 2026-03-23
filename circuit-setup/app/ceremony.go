@@ -702,6 +702,28 @@ type claimResponse struct {
 	SkipReason        string `json:"skipReason,omitempty"`
 }
 
+type apiErrorResponse struct {
+	Error     string `json:"error"`
+	Code      string `json:"code,omitempty"`
+	Retryable bool   `json:"retryable,omitempty"`
+	ErrorID   string `json:"errorId,omitempty"`
+}
+
+type coordinatorAPIError struct {
+	Message    string
+	Code       string
+	Retryable  bool
+	StatusCode int
+	ErrorID    string
+}
+
+func (e *coordinatorAPIError) Error() string {
+	if e == nil || e.Message == "" {
+		return "coordinator api error"
+	}
+	return e.Message
+}
+
 // claimContribution retries lease claim until success/skip or maxWait timeout.
 func claimContribution(
 	v verbosity,
@@ -777,6 +799,11 @@ func claimContribution(
 
 // isRetryableClaimErr reports queue/lock contention errors safe to retry.
 func isRetryableClaimErr(err error) bool {
+	var apiErr *coordinatorAPIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Retryable && apiErr.Code == "claim_busy"
+	}
+
 	// Match coordinator/store contention errors that are expected to resolve with time.
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "participant is not at front of queue") ||
@@ -889,12 +916,7 @@ func submitOutputArtifact(
 	defer resp.Body.Close()
 	// Surface coordinator-side validation failures as direct CLI errors.
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		var e map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&e)
-		if msg, ok := e["error"].(string); ok {
-			return errors.New(msg)
-		}
-		return fmt.Errorf("request failed status %d", resp.StatusCode)
+		return decodeCoordinatorAPIError(resp)
 	}
 	if out == nil {
 		v.Printf(
@@ -938,13 +960,7 @@ func postJSON(url string, payload any, out any) error {
 
 	// On non-2xx, try to surface coordinator error message from JSON body.
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		var e map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&e)
-		if msg, ok := e["error"].(string); ok {
-			return errors.New(msg)
-
-		}
-		return fmt.Errorf("request failed status %d", resp.StatusCode)
+		return decodeCoordinatorAPIError(resp)
 	}
 
 	if out == nil {
@@ -952,6 +968,23 @@ func postJSON(url string, payload any, out any) error {
 	}
 	// Caller decides output schema; helper only decodes into provided destination.
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func decodeCoordinatorAPIError(resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("request failed")
+	}
+	var apiErr apiErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
+		return &coordinatorAPIError{
+			Message:    apiErr.Error,
+			Code:       apiErr.Code,
+			Retryable:  apiErr.Retryable,
+			StatusCode: resp.StatusCode,
+			ErrorID:    apiErr.ErrorID,
+		}
+	}
+	return fmt.Errorf("request failed status %d", resp.StatusCode)
 }
 
 // ExitWithError prints the error to stderr and exits with code 1 if non-nil.
