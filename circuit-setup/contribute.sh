@@ -274,7 +274,13 @@ do_build_local() {
 
   local repo="${WORK_DIR}/repo"
   log "Building ceremony binary..."
-  (cd "$repo" && CGO_ENABLED=0 "$go_bin" build -trimpath -o ./bin/ceremony ./cmd/ceremony)
+  detect_platform
+  log "Detected platform: ${GOOS}/${GOARCH}"
+  local build_tags=""
+  if [[ "$GOARCH" == "amd64" ]]; then
+    build_tags="-tags purego"
+  fi
+  (cd "$repo" && CGO_ENABLED=0 "$go_bin" build -trimpath $build_tags -o ./bin/ceremony ./cmd/ceremony)
 
   CEREMONY_BIN="${repo}/bin/ceremony"
   if [[ ! -x "$CEREMONY_BIN" ]]; then
