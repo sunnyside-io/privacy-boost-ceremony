@@ -854,6 +854,8 @@ func downloadInputArtifact(coordinatorURL, pathSuffix, sessionToken, dstPath str
 	}
 	// Prefer Authorization header so tokens don't appear in URLs/logs.
 	req.Header.Set("Authorization", "Bearer "+sessionToken)
+	// Disable content encoding so reverse proxies do not transform artifact bytes.
+	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		var ue *url.Error

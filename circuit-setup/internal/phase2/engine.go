@@ -86,7 +86,7 @@ func (e *Engine) Contribute(inputPath, outputPath string) error {
 	// Declare local variables used in this stage.
 	var ph2 mpcsetup.Phase2
 	if _, err := ph2.ReadFrom(in); err != nil {
-		return err
+		return fmt.Errorf("read input %s: %w", inputPath, err)
 	}
 
 	// Apply random contribution to produce the next artifact.
