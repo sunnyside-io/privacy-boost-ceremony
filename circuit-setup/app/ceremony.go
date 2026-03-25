@@ -469,11 +469,22 @@ func runContribute(args []string) error {
 	// choose whether to persist a local receipt at the end of the run.
 	fmt.Println("  Save a receipt file? After the ceremony is finalized, you can use")
 	fmt.Println("  it to verify your contributions are included in the published bundle.")
-	fmt.Print("  Save receipt? [Y/n]: ")
-	var answer string
-	fmt.Scanln(&answer)
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer == "" || answer == "y" || answer == "yes" {
+	var saveReceipt bool
+	for {
+		fmt.Print("  Save receipt? [y/n]: ")
+		var answer string
+		fmt.Scanln(&answer)
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer == "y" || answer == "yes" {
+			saveReceipt = true
+			break
+		} else if answer == "n" || answer == "no" {
+			saveReceipt = false
+			break
+		}
+		fmt.Println("  Please enter y or n.")
+	}
+	if saveReceipt {
 		// The saved receipt now uses the richer local metadata format even
 		// though the user prompt remains the same as before.
 		if err := writeContributionReceipt(
