@@ -97,11 +97,20 @@ func (e *Engine) Contribute(inputPath, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
 	// Serialize data to the current writer.
-	_, err = ph2.WriteTo(out)
-	return err
+	if _, err := ph2.WriteTo(out); err != nil {
+		out.Close()
+		return err
+	}
+
+	// Sync ensures all data reaches stable storage before the caller reads the file.
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return err
+	}
+
+	return out.Close()
 }
 
 // Verify checks latest artifact is a valid transition from previous artifact.
