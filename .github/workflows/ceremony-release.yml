@@ -101,7 +101,11 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p release
-          go build -trimpath -buildvcs=false -o release/ceremony ./cmd/ceremony
+          BUILD_TAGS=""
+          if [[ "${{ matrix.goarch }}" == "amd64" ]]; then
+            BUILD_TAGS="-tags purego"
+          fi
+          go build -trimpath -buildvcs=false $BUILD_TAGS -o release/ceremony ./cmd/ceremony
 
       - name: Smoke test binary
         if: matrix.goos == runner.os || (matrix.goos == 'linux' && runner.os == 'Linux') || (matrix.goos == 'darwin' && runner.os == 'macOS')
