@@ -132,15 +132,13 @@ func (e *Engine) Verify(latestPath, originPath string) error {
 	// Deserialize both artifacts.
 	var prev, next mpcsetup.Phase2
 	if _, err := prev.ReadFrom(prevF); err != nil {
-		return err
+		return fmt.Errorf("read origin artifact %s: %w", originPath, err)
 	}
 
-	// Check the operation result and return on error.
 	if _, err := next.ReadFrom(nextF); err != nil {
-		return err
+		return fmt.Errorf("read contributed artifact %s: %w", latestPath, err)
 	}
 
-	// Return the computed result to the caller.
 	return prev.Verify(&next)
 }
 

@@ -86,6 +86,7 @@ detect_platform() {
   esac
   GOOS="$os"
   GOARCH="$arch"
+  log "Detected platform: ${GOOS}/${GOARCH}"
 }
 
 file_sha256() {
@@ -275,7 +276,6 @@ do_build_local() {
   local repo="${WORK_DIR}/repo"
   log "Building ceremony binary..."
   detect_platform
-  log "Detected platform: ${GOOS}/${GOARCH}"
   local build_tags=""
   if [[ "$GOARCH" == "amd64" ]]; then
     build_tags="-tags purego"
