@@ -385,19 +385,6 @@ func runContribute(args []string) error {
 			time.Since(startLocal).Milliseconds(),
 		)
 
-		// Verify locally before uploading to catch computation or I/O corruption early.
-		startVerify := time.Now()
-		if err := engine.Verify(outputPath, inputPath); err != nil {
-			return fmt.Errorf("local verify failed for %s: %w", circuitID, err)
-		}
-		v.Printf(
-			"[ceremony][contribute][%s] step=3/4 circuit=%d/%d local_verify_complete ms=%d\n",
-			circuitID,
-			circuitIndex,
-			totalCircuits,
-			time.Since(startVerify).Milliseconds(),
-		)
-
 		// Submit lets coordinator verify transition and persist accepted output.
 		v.Printf(
 			"[ceremony][contribute][%s] step=4/4 circuit=%d/%d submit_start lease=%s\n",
