@@ -879,11 +879,18 @@ func downloadInputArtifact(coordinatorURL, pathSuffix, sessionToken, dstPath str
 	if err := out.Sync(); err != nil {
 		return err
 	}
+	// Compute and log SHA256 so download integrity can be verified against
+	// the coordinator's artifact hash without needing manual intervention.
+	inputHash, _, err := describeLocalArtifact(dstPath)
+	if err != nil {
+		return fmt.Errorf("hash downloaded artifact: %w", err)
+	}
 	v.Printf(
-		"[ceremony][contribute] input_download_complete downloadPath=%s bytes=%d dst=%s ms=%d\n",
+		"[ceremony][contribute] input_download_complete downloadPath=%s bytes=%d dst=%s sha256=%s ms=%d\n",
 		pathSuffix,
 		n,
 		dstPath,
+		inputHash,
 		time.Since(startDl).Milliseconds(),
 	)
 	return nil
