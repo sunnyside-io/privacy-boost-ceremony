@@ -9,12 +9,15 @@ set -euo pipefail
 # client with the current config-based backend flow.
 
 DEFAULT_RELEASE_REPO="sunnyside-io/privacy-boost-ceremony"
-# The signer is a separate identity from the asset host: releases are built and
-# signed by the backend repo's ceremony-release workflow, then republished here.
+# The signer is a separate identity from the asset host. Releases are built and
+# signed by the backend workflow, then republished to the public ceremony repo,
+# so deriving the identity from RELEASE_REPO would check the wrong signer.
 DEFAULT_SIGNER_REPO="sunnyside-io/privacy-boost-backend"
 DEFAULT_SOURCE_REF="main"
 DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
 DEFAULT_RUN_DIR="${PWD}/privacy-boost-ceremony"
+# The round this script currently serves. Override per round with --coordinator-url.
+DEFAULT_COORDINATOR_URL="http://68.183.252.249:8790"
 
 RELEASE_REPO="${CEREMONY_RELEASE_REPO:-$DEFAULT_RELEASE_REPO}"
 SIGNER_REPO="${CEREMONY_SIGNER_REPO:-$DEFAULT_SIGNER_REPO}"
@@ -23,7 +26,7 @@ CONFIG_URL="${CEREMONY_CONFIG_URL:-https://raw.githubusercontent.com/${RELEASE_R
 CONFIG_URL_EXPLICIT=0
 CONFIG_EXPLICIT=0
 CONFIG_PATH="${CEREMONY_CONFIG_PATH:-}"
-COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-}"
+COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-$DEFAULT_COORDINATOR_URL}"
 RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
 RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
@@ -32,7 +35,7 @@ RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
 # independent of the GitHub Releases channel that also serves the tarball + .sha256.
 CEREMONY_OIDC_ISSUER="${CEREMONY_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CEREMONY_SIGNER_IDENTITY_REGEXP="${CEREMONY_SIGNER_IDENTITY_REGEXP:-}"
-ALLOW_INSECURE_HTTP="${CEREMONY_ALLOW_INSECURE_HTTP:-}"
+ALLOW_INSECURE_HTTP="${CEREMONY_ALLOW_INSECURE_HTTP:-1}"
 QUIET="${CEREMONY_QUIET:-}"
 NO_BROWSER_OPT="${CEREMONY_NO_BROWSER:-}"
 CEREMONY_BIN=""
@@ -52,15 +55,15 @@ Recommended public flow (pins to a signed release tag instead of the mutable mai
        --certificate-identity "https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
        --certificate-oidc-issuer https://token.actions.githubusercontent.com \
        contribute.sh
-  4) bash contribute.sh --coordinator-url https://coordinator.example --release-version <tag>
+  4) bash contribute.sh --release-version <tag>
 
 Quick start without script verification (fetches contribute.sh itself from the mutable main branch,
 though the downloaded ceremony binary is still signature-verified either way):
   curl -fsSLO https://raw.githubusercontent.com/sunnyside-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
-  bash contribute.sh --coordinator-url https://coordinator.example
+  bash contribute.sh
 
 Environment overrides:
-  CEREMONY_COORDINATOR_URL=...   Coordinator server URL
+  CEREMONY_COORDINATOR_URL=...   Coordinator server URL (defaults to the round this script serves)
   CEREMONY_CONFIG_PATH=...       Use a local config file
   CEREMONY_CONFIG_URL=...        Download config from this URL
   CEREMONY_RELEASE_REPO=...      Default: sunnyside-io/privacy-boost-ceremony
@@ -69,7 +72,7 @@ Environment overrides:
   CEREMONY_BUILD_MODE=...        auto, release, local, or docker
   CEREMONY_RELEASE_VERSION=...   GitHub release tag or version
   CEREMONY_WORK_DIR=...          Persistent local state directory
-  CEREMONY_ALLOW_INSECURE_HTTP=1 Allow plaintext HTTP to a non-loopback coordinator; same as --allow-insecure-http
+  CEREMONY_ALLOW_INSECURE_HTTP=0 Re-arm the plaintext-HTTP guard (enabled by default while the coordinator has no TLS)
   CEREMONY_QUIET=1              Pass --quiet to ceremony contribute
   CEREMONY_NO_BROWSER=1         Pass --no-browser to ceremony contribute (also honors a bare NO_BROWSER=1)
 
@@ -151,7 +154,7 @@ fi
 if [[ -n "${CONFIG_PATH}" || "${CONFIG_URL_EXPLICIT}" == "1" ]]; then
   CONFIG_EXPLICIT=1
 fi
-if [[ -n "${ALLOW_INSECURE_HTTP}" ]]; then
+if [[ -n "${ALLOW_INSECURE_HTTP}" && "${ALLOW_INSECURE_HTTP}" != "0" ]]; then
   # Both run_binary's direct invocation and run_repo_quickstart's delegated
   # contribute_quickstart.sh read this same env var, so exporting it once
   # here covers either downstream path without per-call-site flag-forwarding.
