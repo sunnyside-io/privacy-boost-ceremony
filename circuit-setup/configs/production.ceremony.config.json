@@ -12,7 +12,7 @@
   },
   "githubAuth": {
     "enabled": true,
-    "clientId": "Ov23li3FTPDz0l4USJ3C"
+    "clientId": "REPLACE_WITH_GITHUB_OAUTH_APP_CLIENT_ID"
   },
   "artifacts": {
     "provider": "filesystem",
