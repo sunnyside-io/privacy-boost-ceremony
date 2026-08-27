@@ -1,29 +1,86 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Privacy Boost Trusted Setup — Contributor Script
+# Standalone public contributor entrypoint.
 #
-# A standalone, interactive script for contributing to the Privacy Boost
-# trusted setup ceremony. Contributors choose how to obtain the ceremony
-# binary (pre-built release or self-build) and the script handles the rest.
-#
-# Usage:
-#   curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
-#   bash contribute.sh --coordinator-url http://...
-#
-# Environment overrides:
-#   CEREMONY_COORDINATOR_URL   Coordinator server URL (or use --coordinator-url flag)
+# This script mirrors the public ceremony UX from sunnyside-io/privacy-boost-ceremony:
+# contributors can download one script, enter the coordinator URL, choose how to
+# obtain the ceremony binary, and then run the existing `ceremony contribute`
+# client with the current config-based backend flow.
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
+DEFAULT_RELEASE_REPO="sunnyside-io/privacy-boost-ceremony"
+# The signer is a separate identity from the asset host: releases are built and
+# signed by the backend repo's ceremony-release workflow, then republished here.
+DEFAULT_SIGNER_REPO="sunnyside-io/privacy-boost-backend"
+DEFAULT_SOURCE_REF="main"
+DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
+DEFAULT_RUN_DIR="${PWD}/privacy-boost-ceremony"
 
-RELEASE_REPO="testinprod-io/privacy-boost-ceremony"
+RELEASE_REPO="${CEREMONY_RELEASE_REPO:-$DEFAULT_RELEASE_REPO}"
+SIGNER_REPO="${CEREMONY_SIGNER_REPO:-$DEFAULT_SIGNER_REPO}"
+SOURCE_REF="${CEREMONY_SOURCE_REF:-$DEFAULT_SOURCE_REF}"
+CONFIG_URL="${CEREMONY_CONFIG_URL:-https://raw.githubusercontent.com/${RELEASE_REPO}/${SOURCE_REF}/${DEFAULT_CONFIG_RELPATH}}"
+CONFIG_URL_EXPLICIT=0
+CONFIG_EXPLICIT=0
+CONFIG_PATH="${CEREMONY_CONFIG_PATH:-}"
 COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-}"
-
-WORK_DIR=""
+RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
+BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
+RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
+# Keyless cosign trust anchor for verifying the release signature bundle. The
+# signer is pinned to this repo's ceremony-release workflow at a ceremony/v* tag,
+# independent of the GitHub Releases channel that also serves the tarball + .sha256.
+CEREMONY_OIDC_ISSUER="${CEREMONY_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
+CEREMONY_SIGNER_IDENTITY_REGEXP="${CEREMONY_SIGNER_IDENTITY_REGEXP:-}"
+ALLOW_INSECURE_HTTP="${CEREMONY_ALLOW_INSECURE_HTTP:-}"
+QUIET="${CEREMONY_QUIET:-}"
+NO_BROWSER_OPT="${CEREMONY_NO_BROWSER:-}"
 CEREMONY_BIN=""
-RELEASE_TAG=""
+SOURCE_DIR=""
+WORK_DIR=""
 
-# ── Argument parsing ─────────────────────────────────────────────────────────
+usage() {
+  cat <<'EOF'
+Usage:
+  bash contribute.sh [--coordinator-url http://host] [--config path.json] [--config-url https://...] [--build-mode auto|release|local|docker] [--release-version X.Y.Z] [--source-ref git-ref] [--work-dir path] [--allow-insecure-http] [--quiet] [--no-browser]
+
+Recommended public flow (pins to a signed release tag instead of the mutable main branch):
+  1) Find the latest tag at https://github.com/sunnyside-io/privacy-boost-ceremony/releases
+  2) curl -fsSLO https://github.com/sunnyside-io/privacy-boost-ceremony/releases/download/<tag>/contribute.sh
+     curl -fsSLO https://github.com/sunnyside-io/privacy-boost-ceremony/releases/download/<tag>/contribute.sh.cosign.bundle
+  3) cosign verify-blob --bundle contribute.sh.cosign.bundle \
+       --certificate-identity "https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
+       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+       contribute.sh
+  4) bash contribute.sh --coordinator-url https://coordinator.example --release-version <tag>
+
+Quick start without script verification (fetches contribute.sh itself from the mutable main branch,
+though the downloaded ceremony binary is still signature-verified either way):
+  curl -fsSLO https://raw.githubusercontent.com/sunnyside-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
+  bash contribute.sh --coordinator-url https://coordinator.example
+
+Environment overrides:
+  CEREMONY_COORDINATOR_URL=...   Coordinator server URL
+  CEREMONY_CONFIG_PATH=...       Use a local config file
+  CEREMONY_CONFIG_URL=...        Download config from this URL
+  CEREMONY_RELEASE_REPO=...      Default: sunnyside-io/privacy-boost-ceremony
+  CEREMONY_SIGNER_REPO=...       Default: sunnyside-io/privacy-boost-backend
+  CEREMONY_SOURCE_REF=...        Default: main
+  CEREMONY_BUILD_MODE=...        auto, release, local, or docker
+  CEREMONY_RELEASE_VERSION=...   GitHub release tag or version
+  CEREMONY_WORK_DIR=...          Persistent local state directory
+  CEREMONY_ALLOW_INSECURE_HTTP=1 Allow plaintext HTTP to a non-loopback coordinator; same as --allow-insecure-http
+  CEREMONY_QUIET=1              Pass --quiet to ceremony contribute
+  CEREMONY_NO_BROWSER=1         Pass --no-browser to ceremony contribute (also honors a bare NO_BROWSER=1)
+
+Build modes:
+  release   Download a verified prebuilt binary from GitHub Releases
+  local     Clone source and build with local Go through the repo quickstart
+  docker    Clone source and build inside a generic Go container as a build
+            sandbox (same trust level as local; not a verified release channel)
+  auto      Try release, then local, then Docker
+EOF
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,378 +88,554 @@ while [[ $# -gt 0 ]]; do
       COORDINATOR_URL="$2"
       shift 2
       ;;
+    --config)
+      CONFIG_PATH="$2"
+      shift 2
+      ;;
+    --config-url)
+      CONFIG_URL="$2"
+      CONFIG_URL_EXPLICIT=1
+      CONFIG_PATH=""
+      shift 2
+      ;;
+    --build-mode)
+      BUILD_MODE="$2"
+      shift 2
+      ;;
+    --release-version)
+      RELEASE_VERSION="$2"
+      shift 2
+      ;;
+    --release-repo)
+      RELEASE_REPO="$2"
+      shift 2
+      ;;
+    --source-ref)
+      SOURCE_REF="$2"
+      shift 2
+      ;;
+    --work-dir)
+      RUN_DIR="$2"
+      shift 2
+      ;;
+    --allow-insecure-http)
+      ALLOW_INSECURE_HTTP=1
+      shift
+      ;;
+    --quiet)
+      QUIET=1
+      shift
+      ;;
+    --no-browser)
+      NO_BROWSER_OPT=1
+      shift
+      ;;
     -h|--help)
-      echo "Usage: bash contribute.sh [--coordinator-url <url>]"
+      usage
       exit 0
       ;;
     *)
-      echo "Unknown arg: $1" >&2
-      echo "Usage: bash contribute.sh [--coordinator-url <url>]" >&2
+      printf '[ceremony] error: unknown arg: %s\n' "$1" >&2
+      usage >&2
       exit 2
       ;;
   esac
 done
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+if [[ -n "${CEREMONY_CONFIG_URL:-}" ]]; then
+  CONFIG_URL_EXPLICIT=1
+fi
+if [[ -z "${CONFIG_PATH}" && "${CONFIG_URL_EXPLICIT}" == "0" ]]; then
+  CONFIG_URL="https://raw.githubusercontent.com/${RELEASE_REPO}/${SOURCE_REF}/${DEFAULT_CONFIG_RELPATH}"
+fi
+if [[ -n "${CONFIG_PATH}" || "${CONFIG_URL_EXPLICIT}" == "1" ]]; then
+  CONFIG_EXPLICIT=1
+fi
+if [[ -n "${ALLOW_INSECURE_HTTP}" ]]; then
+  # Both run_binary's direct invocation and run_repo_quickstart's delegated
+  # contribute_quickstart.sh read this same env var, so exporting it once
+  # here covers either downstream path without per-call-site flag-forwarding.
+  export CEREMONY_ALLOW_INSECURE_HTTP=1
+fi
 
-log()      { printf '\033[1;34m[ceremony]\033[0m %s\n' "$*"; }
-log_ok()   { printf '\033[1;32m[ceremony]\033[0m %s\n' "$*"; }
-log_warn() { printf '\033[1;33m[ceremony]\033[0m %s\n' "$*" >&2; }
-log_err()  { printf '\033[1;31m[ceremony]\033[0m %s\n' "$*" >&2; }
+log() {
+  printf '[ceremony] %s\n' "$*"
+}
+
+warn() {
+  printf '[ceremony] warning: %s\n' "$*" >&2
+}
+
+fail() {
+  printf '[ceremony] error: %s\n' "$*" >&2
+  exit 1
+}
 
 cleanup() {
   if [[ -n "${WORK_DIR}" && -d "${WORK_DIR}" ]]; then
-    log "Cleaning up work directory: ${WORK_DIR}"
     rm -rf "${WORK_DIR}"
   fi
 }
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    log_err "Required command not found: $1"
     return 1
   fi
+}
+
+abs_path() {
+  local path="$1"
+  local dir base
+  dir="$(cd "$(dirname "${path}")" && pwd)"
+  base="$(basename "${path}")"
+  printf '%s/%s\n' "${dir}" "${base}"
+}
+
+normalize_release_tag() {
+  local version="$1"
+  if [[ -z "${version}" ]]; then
+    return 1
+  fi
+  if [[ "${version}" == ceremony/v* ]]; then
+    printf '%s\n' "${version}"
+    return 0
+  fi
+  if [[ "${version}" == v* ]]; then
+    printf 'ceremony/%s\n' "${version}"
+    return 0
+  fi
+  printf 'ceremony/v%s\n' "${version}"
+}
+
+normalize_build_mode() {
+  case "${BUILD_MODE}" in
+    ""|menu)
+      BUILD_MODE=""
+      ;;
+    prebuilt)
+      BUILD_MODE="release"
+      ;;
+    release|local|docker|auto)
+      ;;
+    *)
+      fail "unsupported build mode: ${BUILD_MODE}"
+      ;;
+  esac
+}
+
+# Set when preflight_check_cosign has already warned about a missing cosign, so
+# verify_release_signature doesn't print the same warning a second time when the
+# preflight's prediction plays out.
+COSIGN_MISSING_WARNED=0
+
+# Checks cosign availability immediately after the build mode is known, before
+# any download begins, so a missing cosign is visible up front instead of only
+# being discovered deep inside verify_release_signature after other setup work
+# has already run. Only warns for modes that can reach the prebuilt release path.
+preflight_check_cosign() {
+  case "${BUILD_MODE}" in
+    release|auto) ;;
+    *) return 0 ;;
+  esac
+  if command -v cosign >/dev/null 2>&1; then
+    return 0
+  fi
+  COSIGN_MISSING_WARNED=1
+  if [[ "${BUILD_MODE}" == "release" ]]; then
+    warn "cosign not found: --build-mode release verifies the downloaded binary's signature before running it, and this run will abort rather than use an unverified download."
+  else
+    warn "cosign not found: the release path cannot verify the downloaded binary's signature, so this run will fall back to a source build."
+  fi
+  warn "Install cosign: https://docs.sigstore.dev/system_config/installation"
+}
+
+show_banner() {
+  cat <<'EOF'
+
+  Privacy Boost trusted setup ceremony
+
+  This script will prepare the ceremony client, open GitHub device auth,
+  and submit your contribution to the coordinator.
+
+EOF
+}
+
+show_menu() {
+  cat <<'EOF'
+  How would you like to obtain the ceremony binary?
+
+    1) Download prebuilt release          fastest
+    2) Build from source with local Go    requires Go and build tools
+    3) Build from source with Docker      requires Docker
+
+EOF
+}
+
+prompt_coordinator_url() {
+  if [[ -n "${COORDINATOR_URL}" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    fail "coordinator URL is required, pass --coordinator-url or CEREMONY_COORDINATOR_URL"
+  fi
+  printf '  Enter the coordinator URL: '
+  read -r COORDINATOR_URL
+  if [[ -z "${COORDINATOR_URL}" ]]; then
+    fail "coordinator URL is required"
+  fi
+}
+
+prompt_build_mode() {
+  normalize_build_mode
+  if [[ -n "${BUILD_MODE}" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    BUILD_MODE="auto"
+    return 0
+  fi
+  show_menu
+  local choice
+  while true; do
+    printf '  Enter your choice [1-3]: '
+    read -r choice
+    case "${choice}" in
+      1)
+        BUILD_MODE="release"
+        return 0
+        ;;
+      2)
+        BUILD_MODE="local"
+        return 0
+        ;;
+      3)
+        BUILD_MODE="docker"
+        return 0
+        ;;
+      *)
+        warn "invalid choice, enter 1, 2, or 3"
+        ;;
+    esac
+  done
+}
+
+prepare_run_dir() {
+  mkdir -p "${RUN_DIR}"
+  RUN_DIR="$(abs_path "${RUN_DIR}")"
+}
+
+prepare_config() {
+  prepare_run_dir
+  if [[ -n "${CONFIG_PATH}" ]]; then
+    if [[ ! -f "${CONFIG_PATH}" ]]; then
+      fail "config not found: ${CONFIG_PATH}"
+    fi
+    CONFIG_PATH="$(abs_path "${CONFIG_PATH}")"
+    log "Using local config: ${CONFIG_PATH}"
+    return 0
+  fi
+
+  require_cmd curl || fail "curl is required to download the ceremony config"
+  CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
+  log "Downloading ceremony config from ${CONFIG_URL}"
+  curl -fL --progress-bar "${CONFIG_URL}" -o "${CONFIG_PATH}"
 }
 
 detect_platform() {
   local os arch
   os="$(uname -s)"
   arch="$(uname -m)"
-  case "$os" in
-    Linux)  os="linux" ;;
-    Darwin) os="darwin" ;;
+  case "${os}" in
+    Linux)
+      GOOS="linux"
+      ;;
+    Darwin)
+      GOOS="darwin"
+      ;;
     *)
-      log_err "Unsupported OS: $os"
-      exit 1
+      fail "unsupported OS: ${os}"
       ;;
   esac
-  case "$arch" in
-    x86_64|amd64)   arch="amd64" ;;
-    arm64|aarch64)   arch="arm64" ;;
+  case "${arch}" in
+    x86_64|amd64)
+      GOARCH="amd64"
+      ;;
+    arm64|aarch64)
+      GOARCH="arm64"
+      ;;
     *)
-      log_err "Unsupported architecture: $arch"
-      exit 1
+      fail "unsupported architecture: ${arch}"
       ;;
   esac
-  GOOS="$os"
-  GOARCH="$arch"
-  log "Detected platform: ${GOOS}/${GOARCH}"
 }
 
 file_sha256() {
   local path="$1"
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$path" | awk '{print $1}'
-  elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$path" | awk '{print $1}'
+    shasum -a 256 "${path}" | awk '{print $1}'
+    return 0
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${path}" | awk '{print $1}'
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "${path}" | awk '{print $NF}'
+    return 0
+  fi
+  return 1
+}
+
+# Resolve the cosign identity flag/value pair used to verify release artifacts.
+# Defaults to an exact match on the resolved release tag so a signature from a
+# different ceremony release cannot verify. CEREMONY_SIGNER_IDENTITY_REGEXP
+# overrides to pattern matching for callers that need it (e.g. a fork).
+resolve_signer_identity() {
+  local release_tag="$1"
+  if [[ -n "${CEREMONY_SIGNER_IDENTITY_REGEXP:-}" ]]; then
+    SIGNER_IDENTITY_FLAG="--certificate-identity-regexp"
+    SIGNER_IDENTITY_VALUE="${CEREMONY_SIGNER_IDENTITY_REGEXP}"
   else
-    log_err "No checksum tool found (need shasum or sha256sum)"
-    return 1
+    SIGNER_IDENTITY_FLAG="--certificate-identity"
+    SIGNER_IDENTITY_VALUE="https://github.com/${SIGNER_REPO}/.github/workflows/ceremony-release.yml@refs/tags/${release_tag}"
   fi
 }
 
-# ── Release resolution ────────────────────────────────────────────────────────
+# Verify a detached keyless-cosign signature bundle for a release artifact.
+# Returns 0 on success, 1 if cosign is unavailable (caller may fall back to a
+# source build), 2 if verification fails (a tampering signal, caller must abort).
+verify_release_signature() {
+  local bundle="$1" artifact="$2" identity_flag="$3" identity_value="$4"
+  if ! command -v cosign >/dev/null 2>&1; then
+    if [[ "${COSIGN_MISSING_WARNED}" -eq 0 ]]; then
+      warn "cosign not found, cannot verify the release signature."
+      warn "Install cosign (https://docs.sigstore.dev/system_config/installation) or rerun with --build-mode local."
+    fi
+    return 1
+  fi
+  if ! cosign verify-blob \
+    --bundle "${bundle}" \
+    "${identity_flag}" "${identity_value}" \
+    --certificate-oidc-issuer "${CEREMONY_OIDC_ISSUER}" \
+    "${artifact}" >/dev/null 2>&1; then
+    return 2
+  fi
+  return 0
+}
 
 resolve_release_tag() {
-  # Return cached result if already resolved
-  if [[ -n "$RELEASE_TAG" ]]; then
-    printf '%s\n' "$RELEASE_TAG"
+  if [[ -n "${RELEASE_VERSION}" ]]; then
+    normalize_release_tag "${RELEASE_VERSION}"
     return 0
   fi
 
-  log "Checking GitHub for the latest ceremony release..." >&2
-  local releases_json
+  require_cmd curl || return 1
+  local releases_json tag
   releases_json="$(curl -fsSL \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     -H "User-Agent: privacy-boost-ceremony" \
     "https://api.github.com/repos/${RELEASE_REPO}/releases?per_page=20" 2>/dev/null || true)"
-
-  if [[ -z "$releases_json" ]]; then
-    log_err "Could not query GitHub releases."
+  if [[ -z "${releases_json}" ]]; then
     return 1
   fi
 
-  local tag
   if command -v python3 >/dev/null 2>&1; then
-    tag="$(printf '%s' "$releases_json" | python3 -c '
-import json, sys
-for r in json.load(sys.stdin):
-    if r.get("draft") or r.get("prerelease"):
+    tag="$(printf '%s' "${releases_json}" | python3 -c '
+import json
+import sys
+
+for release in json.load(sys.stdin):
+    if release.get("draft") or release.get("prerelease"):
         continue
-    t = r.get("tag_name", "")
-    if t.startswith("ceremony/v") or t.startswith("v"):
-        print(t)
+    tag = release.get("tag_name", "")
+    if tag.startswith("ceremony/v"):
+        print(tag)
         break
 ' 2>/dev/null || true)"
   else
-    # Fallback: simple grep for tag pattern (match both v* and ceremony/v*)
-    tag="$(printf '%s' "$releases_json" | grep -oE '"tag_name":\s*"(ceremony/v|v)[^"]*"' | head -1 | grep -oE '(ceremony/v|v)[^"]*' || true)"
+    tag="$(printf '%s' "${releases_json}" | grep -oE '"tag_name":[[:space:]]*"ceremony/v[^"]*"' | head -n 1 | grep -oE 'ceremony/v[^"]*' || true)"
   fi
 
-  if [[ -z "$tag" ]]; then
-    log_err "No stable ceremony release found."
+  if [[ -z "${tag}" ]]; then
     return 1
   fi
-  RELEASE_TAG="$tag"
-  printf '%s\n' "$RELEASE_TAG"
+  printf '%s\n' "${tag}"
 }
 
-# ── Option 1: Download pre-built release ──────────────────────────────────────
-
-do_prebuilt_release() {
-  require_cmd curl
-  require_cmd tar
+download_prebuilt_release() {
+  require_cmd curl || return 1
+  require_cmd tar || return 1
   detect_platform
-
-  local release_tag
-  release_tag="$(resolve_release_tag)" || exit 1
-  log "Using release: $release_tag"
-
-  local asset="ceremony-${GOOS}-${GOARCH}.tar.gz"
-  local base_url="https://github.com/${RELEASE_REPO}/releases/download/${release_tag}"
-
+  local release_tag asset base_url expected actual
+  release_tag="$(resolve_release_tag)" || return 1
+  asset="ceremony-${GOOS}-${GOARCH}.tar.gz"
+  base_url="https://github.com/${RELEASE_REPO}/releases/download/${release_tag}"
   WORK_DIR="$(mktemp -d)"
   trap cleanup EXIT
 
-  log "Downloading ${asset}..."
-  if ! curl -fL --progress-bar "${base_url}/${asset}" -o "${WORK_DIR}/${asset}"; then
-    log_err "Failed to download ${asset} from ${release_tag}"
-    exit 1
-  fi
+  log "Downloading ${asset} from ${release_tag}"
+  curl -fL --progress-bar "${base_url}/${asset}" -o "${WORK_DIR}/${asset}" || return 1
+  curl -fL --progress-bar "${base_url}/${asset}.sha256" -o "${WORK_DIR}/${asset}.sha256" || return 1
 
-  log "Downloading checksum..."
-  if ! curl -fL --progress-bar "${base_url}/${asset}.sha256" -o "${WORK_DIR}/${asset}.sha256"; then
-    log_err "Failed to download checksum for ${asset}"
-    exit 1
-  fi
-
-  log "Verifying checksum..."
-  local expected actual
-  expected="$(awk '{print $1}' "${WORK_DIR}/${asset}.sha256" | tr '[:upper:]' '[:lower:]')"
+  expected="$(awk 'NR==1 {print $1}' "${WORK_DIR}/${asset}.sha256" | tr '[:upper:]' '[:lower:]')"
   actual="$(file_sha256 "${WORK_DIR}/${asset}" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$expected" != "$actual" ]]; then
-    log_err "Checksum verification FAILED"
-    log_err "  expected: ${expected}"
-    log_err "  got:      ${actual}"
-    exit 1
+  if [[ -z "${expected}" || -z "${actual}" || "${expected}" != "${actual}" ]]; then
+    fail "checksum verification failed for ${asset}"
   fi
-  log_ok "Checksum verified."
+
+  resolve_signer_identity "${release_tag}"
+  log "Downloading ${asset}.cosign.bundle from ${release_tag}"
+  if ! curl -fL --progress-bar "${base_url}/${asset}.cosign.bundle" -o "${WORK_DIR}/${asset}.cosign.bundle"; then
+    warn "no cosign signature bundle published for ${asset}, refusing the prebuilt path"
+    return 1
+  fi
+  local vrc=0
+  verify_release_signature "${WORK_DIR}/${asset}.cosign.bundle" "${WORK_DIR}/${asset}" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || vrc=$?
+  if [[ "${vrc}" -eq 2 ]]; then
+    fail "release signature verification FAILED for ${asset}, the download may be tampered with, aborting"
+  elif [[ "${vrc}" -ne 0 ]]; then
+    return 1
+  fi
+  log "Verified release signature for ${asset}"
+
+  # When the contributor did not choose a config, fetch the config published
+  # with this release and verify it with the same pinned identity as the binary.
+  # Never leave a prebuilt release paired with the mutable config from main.
+  if [[ "${CONFIG_EXPLICIT}" == "0" ]]; then
+    log "Downloading signed config from ${release_tag}"
+    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json" -o "${WORK_DIR}/ceremony.config.json"; then
+      warn "no signed config published with ${release_tag}, refusing the prebuilt path"
+      return 1
+    fi
+    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json.cosign.bundle" -o "${WORK_DIR}/ceremony.config.json.cosign.bundle"; then
+      warn "no signed config bundle published with ${release_tag}, refusing the prebuilt path"
+      return 1
+    fi
+    local cvrc=0
+    verify_release_signature "${WORK_DIR}/ceremony.config.json.cosign.bundle" "${WORK_DIR}/ceremony.config.json" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || cvrc=$?
+    if [[ "${cvrc}" -eq 2 ]]; then
+      fail "release config signature verification FAILED, the config may be tampered with, aborting"
+    elif [[ "${cvrc}" -ne 0 ]]; then
+      warn "could not verify the signed release config, refusing the prebuilt path"
+      return 1
+    fi
+    cp "${WORK_DIR}/ceremony.config.json" "${RUN_DIR}/ceremony.config.json"
+    CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
+    log "Using pinned config published with ${release_tag}"
+  fi
 
   tar -xzf "${WORK_DIR}/${asset}" -C "${WORK_DIR}"
   if [[ ! -f "${WORK_DIR}/ceremony" ]]; then
-    log_err "Release archive did not contain a ceremony binary"
-    exit 1
+    fail "release archive did not contain a ceremony binary"
   fi
-  chmod 0755 "${WORK_DIR}/ceremony"
-  CEREMONY_BIN="${WORK_DIR}/ceremony"
-  log_ok "Pre-built binary ready."
+  cp "${WORK_DIR}/ceremony" "${RUN_DIR}/ceremony"
+  chmod 0755 "${RUN_DIR}/ceremony"
+  CEREMONY_BIN="${RUN_DIR}/ceremony"
+  if ! "${CEREMONY_BIN}" version --expect "${release_tag}"; then
+    fail "downloaded binary's stamped version does not match release ${release_tag}, the archive may be tampered with or mismatched"
+  fi
+  log "Prebuilt binary ready: ${CEREMONY_BIN}"
 }
 
-# ── Clone repo (shared by self-build options) ─────────────────────────────────
+clone_source_repo() {
+  require_cmd git || fail "git is required to build from source"
+  mkdir -p "${RUN_DIR}"
+  SOURCE_DIR="${RUN_DIR}/source"
+  local ref
+  if [[ -n "${RELEASE_VERSION}" ]]; then
+    ref="$(normalize_release_tag "${RELEASE_VERSION}")"
+  else
+    ref="${SOURCE_REF}"
+  fi
 
-clone_repo() {
-  require_cmd git
-
-  local release_tag
-  release_tag="$(resolve_release_tag)" || exit 1
-  log "Cloning repository at tag: ${release_tag}"
-
-  WORK_DIR="$(mktemp -d)"
-  trap cleanup EXIT
-
-  git clone --depth 1 --branch "${release_tag}" \
-    "https://github.com/${RELEASE_REPO}.git" "${WORK_DIR}/repo"
-  log_ok "Repository cloned."
-}
-
-# ── Option 2: Build from source (local Go) ────────────────────────────────────
-
-discover_go() {
-  local candidate=""
-
-  # 1. PATH
-  candidate="$(command -v go 2>/dev/null || true)"
-  if [[ -n "$candidate" && -x "$candidate" ]]; then
-    printf '%s\n' "$candidate"
+  if [[ -d "${SOURCE_DIR}/.git" ]]; then
+    log "Updating source checkout at ${SOURCE_DIR}"
+    git -C "${SOURCE_DIR}" fetch --depth 1 origin "${ref}"
+    git -C "${SOURCE_DIR}" checkout --detach FETCH_HEAD
     return 0
   fi
-
-  # 2. mise
-  if command -v mise >/dev/null 2>&1; then
-    candidate="$(mise which go 2>/dev/null || true)"
-    if [[ -n "$candidate" && -x "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
+  if [[ -e "${SOURCE_DIR}" ]]; then
+    fail "${SOURCE_DIR} exists but is not a git checkout, pass --work-dir to use a clean directory"
   fi
-
-  # 3. Homebrew (macOS)
-  local brew_go
-  for brew_go in \
-    /opt/homebrew/opt/go/libexec/bin/go \
-    /usr/local/opt/go/libexec/bin/go \
-    /usr/local/go/bin/go; do
-    if [[ -x "$brew_go" ]]; then
-      printf '%s\n' "$brew_go"
-      return 0
-    fi
-  done
-
-  # 4. User's login shell
-  local shell_path="${SHELL:-}"
-  if [[ -n "$shell_path" && -x "$shell_path" ]]; then
-    candidate="$("$shell_path" -ilc 'command -v go 2>/dev/null || true' 2>/dev/null || true)"
-    if [[ -n "$candidate" && -x "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  fi
-
-  return 1
+  log "Cloning ${RELEASE_REPO} at ${ref}"
+  git clone --depth 1 --branch "${ref}" "https://github.com/${RELEASE_REPO}.git" "${SOURCE_DIR}"
 }
 
-do_build_local() {
-  local go_bin
-  go_bin="$(discover_go || true)"
-  if [[ -z "$go_bin" ]]; then
-    log_err "Go not found. Install Go 1.24+ or choose the Docker build option."
-    exit 1
+run_binary() {
+  local args=("${CEREMONY_BIN}" contribute --config "${CONFIG_PATH}" --coordinator-url "${COORDINATOR_URL}")
+  if [[ -n "${QUIET}" ]]; then
+    args+=(--quiet)
   fi
-  log "Found Go: $("$go_bin" version 2>/dev/null || echo "$go_bin")"
-
-  clone_repo
-
-  local repo="${WORK_DIR}/repo"
-  log "Building ceremony binary..."
-  detect_platform
-  local build_tags=""
-  if [[ "$GOARCH" == "amd64" ]]; then
-    build_tags="-tags purego"
+  if [[ -n "${NO_BROWSER_OPT}" || -n "${NO_BROWSER:-}" ]]; then
+    args+=(--no-browser)
   fi
-  (cd "$repo" && CGO_ENABLED=0 "$go_bin" build -trimpath $build_tags -o ./bin/ceremony ./cmd/ceremony)
-
-  CEREMONY_BIN="${repo}/bin/ceremony"
-  if [[ ! -x "$CEREMONY_BIN" ]]; then
-    log_err "Build did not produce an executable binary"
-    exit 1
-  fi
-  log_ok "Build complete."
+  log "Starting contribution against ${COORDINATOR_URL}"
+  (cd "${RUN_DIR}" && "${args[@]}")
 }
 
-# ── Option 3: Build from source (Docker) ──────────────────────────────────────
-
-do_build_and_run_docker() {
-  require_cmd docker
-
-  # Verify Docker daemon is running
-  if ! docker info >/dev/null 2>&1; then
-    log_err "Docker daemon is not running. Please start Docker and try again."
-    exit 1
+run_repo_quickstart() {
+  local mode="$1"
+  if [[ -z "${CONFIG_PATH}" ]]; then
+    prepare_config
   fi
-
-  clone_repo
-
-  local repo="${WORK_DIR}/repo"
-
-  log "Building ceremony image with Docker..."
-  docker build -t ceremony-build -f "${repo}/Dockerfile" "${repo}"
-
-  log_ok "Build complete."
-
-  local state_dir="${repo}/ceremony-state"
-  mkdir -p "$state_dir"
-
-  docker run --rm -it \
-    -v "${state_dir}:/work/ceremony-state" \
-    ceremony-build \
-    contribute \
-    --coordinator-url "$COORDINATOR_URL"
-
-  # Docker runs inside a temporary clone, so preserve the full local state
-  # directory before the outer script cleanup removes the working tree.
-  if [[ -d "${state_dir}" && -n "$(ls -A "${state_dir}" 2>/dev/null)" ]]; then
-    rm -rf "${PWD}/ceremony-state"
-    mkdir -p "${PWD}/ceremony-state"
-    cp -R "${state_dir}/." "${PWD}/ceremony-state/"
-    log_ok "Local contribution files copied to ${PWD}/ceremony-state"
+  clone_source_repo
+  local args=(circuit-setup/contribute_quickstart.sh --config "${CONFIG_PATH}" --coordinator-url "${COORDINATOR_URL}" --build-mode "${mode}" --release-repo "${RELEASE_REPO}")
+  if [[ -n "${QUIET}" ]]; then
+    args+=(--quiet)
   fi
+  if [[ -n "${NO_BROWSER_OPT}" || -n "${NO_BROWSER:-}" ]]; then
+    args+=(--no-browser)
+  fi
+  (cd "${SOURCE_DIR}" && bash "${args[@]}")
 }
 
-# ── Contribution ──────────────────────────────────────────────────────────────
-
-run_contribution() {
-  "$CEREMONY_BIN" contribute \
-    --coordinator-url "$COORDINATOR_URL"
-}
-
-# ── Interactive menu ──────────────────────────────────────────────────────────
-
-show_banner() {
-  echo ""
-  echo "  ╔════════════════════════════════════════════════════════════╗"
-  echo "  ║  Privacy Boost - Trusted Setup Ceremony                    ║"
-  echo "  ║                                                            ║"
-  echo "  ║  Thank you for contributing to the ceremony!               ║"
-  echo "  ║  Your participation strengthens protocol security.         ║"
-  echo "  ║  This may take 10-15 minutes.                              ║"
-  echo "  ╚════════════════════════════════════════════════════════════╝"
-  echo ""
-}
-
-show_menu() {
-  cat <<'MENU'
-  How would you like to obtain the ceremony binary?
-
-    1) Download pre-built release          (fastest)
-    2) Build from source (local Go)        (requires Go 1.24+)
-    3) Build from source (Docker)          (no local toolchain needed)
-
-MENU
-}
-
-prompt_coordinator_url() {
-  if [[ -n "$COORDINATOR_URL" ]]; then
+run_auto() {
+  if download_prebuilt_release; then
+    run_binary
     return 0
   fi
-  echo ""
-  printf '  Enter the coordinator URL: '
-  read -r COORDINATOR_URL
-  if [[ -z "$COORDINATOR_URL" ]]; then
-    log_err "Coordinator URL is required."
-    exit 1
+  warn "prebuilt release unavailable, trying local build"
+  if run_repo_quickstart local; then
+    return 0
   fi
+  warn "local build unavailable, trying Docker"
+  run_repo_quickstart docker
 }
 
 main() {
   show_banner
-
   prompt_coordinator_url
+  prompt_build_mode
+  preflight_check_cosign
+  prepare_run_dir
 
-  local use_docker=false
-
-  show_menu
-  local choice
-  while true; do
-    printf '  Enter your choice [1-3]: '
-    read -r choice
-    case "$choice" in
-      1) do_prebuilt_release; break ;;
-      2) do_build_local;      break ;;
-      3) use_docker=true;     break ;;
-      *)
-        log_warn "Invalid choice. Please enter 1, 2, or 3."
-        ;;
-    esac
-  done
-
-  # Docker builds and runs contribution inside the container
-  if [[ "$use_docker" == true ]]; then
-    do_build_and_run_docker
-    return 0
-  fi
-
-  run_contribution
+  case "${BUILD_MODE}" in
+    release)
+      if [[ "${CONFIG_EXPLICIT}" == "1" ]]; then
+        prepare_config
+      fi
+      download_prebuilt_release || fail "failed to download a prebuilt ceremony binary"
+      run_binary
+      ;;
+    local)
+      prepare_config
+      run_repo_quickstart local
+      ;;
+    docker)
+      prepare_config
+      run_repo_quickstart docker
+      ;;
+    auto)
+      if [[ "${CONFIG_EXPLICIT}" == "1" ]]; then
+        prepare_config
+      fi
+      run_auto
+      ;;
+    *)
+      fail "unsupported build mode: ${BUILD_MODE}"
+      ;;
+  esac
 }
 
 main "$@"
