@@ -35,17 +35,31 @@ RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
 # independent of the GitHub Releases channel that also serves the tarball + .sha256.
 CEREMONY_OIDC_ISSUER="${CEREMONY_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CEREMONY_SIGNER_IDENTITY_REGEXP="${CEREMONY_SIGNER_IDENTITY_REGEXP:-}"
+# Pinned cosign build fetched when the contributor has none installed, so the
+# published two-command flow keeps its signature check without asking anyone to
+# install a signing tool first. A fetched cosign is used only after its digest
+# matches the value baked in below, so it is trusted exactly as far as this
+# script is, and it never lands on the contributor's PATH.
+COSIGN_VERSION="${CEREMONY_COSIGN_VERSION:-v3.1.3}"
+# Set to 1 to accept the published SHA256 alone and skip the signature check.
+# The interactive prompt sets this when the contributor declines the fetch. A
+# checksum is served from the same release page as the binary, so this is a
+# real reduction in what the download proves, never a silent default.
+SKIP_SIGNATURE_VERIFICATION="${CEREMONY_SKIP_SIGNATURE_VERIFICATION:-0}"
+COSIGN_DOWNLOAD_BASE="${CEREMONY_COSIGN_DOWNLOAD_BASE:-https://github.com/sigstore/cosign/releases/download}"
 ALLOW_INSECURE_HTTP="${CEREMONY_ALLOW_INSECURE_HTTP:-1}"
 QUIET="${CEREMONY_QUIET:-}"
 NO_BROWSER_OPT="${CEREMONY_NO_BROWSER:-}"
 CEREMONY_BIN=""
 SOURCE_DIR=""
 WORK_DIR=""
+COSIGN_BIN=""
+COSIGN_DIR=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash contribute.sh [--coordinator-url http://host] [--config path.json] [--config-url https://...] [--build-mode auto|release|local|docker] [--release-version X.Y.Z] [--source-ref git-ref] [--work-dir path] [--allow-insecure-http] [--quiet] [--no-browser]
+  bash contribute.sh [--coordinator-url http://host] [--config path.json] [--config-url https://...] [--build-mode auto|release|local|docker] [--release-version X.Y.Z] [--source-ref git-ref] [--work-dir path] [--allow-insecure-http] [--skip-signature-verification] [--quiet] [--no-browser]
 
 Recommended public flow (pins to a signed release tag instead of the mutable main branch):
   1) Find the latest tag at https://github.com/sunnyside-io/privacy-boost-ceremony/releases
@@ -125,6 +139,10 @@ while [[ $# -gt 0 ]]; do
       ALLOW_INSECURE_HTTP=1
       shift
       ;;
+    --skip-signature-verification)
+      SKIP_SIGNATURE_VERIFICATION=1
+      shift
+      ;;
     --quiet)
       QUIET=1
       shift
@@ -177,6 +195,9 @@ fail() {
 cleanup() {
   if [[ -n "${WORK_DIR}" && -d "${WORK_DIR}" ]]; then
     rm -rf "${WORK_DIR}"
+  fi
+  if [[ -n "${COSIGN_DIR}" && -d "${COSIGN_DIR}" ]]; then
+    rm -rf "${COSIGN_DIR}"
   fi
 }
 
@@ -231,23 +252,36 @@ normalize_build_mode() {
 # preflight's prediction plays out.
 COSIGN_MISSING_WARNED=0
 
-# Checks cosign availability immediately after the build mode is known, before
-# any download begins, so a missing cosign is visible up front instead of only
-# being discovered deep inside verify_release_signature after other setup work
-# has already run. Only warns for modes that can reach the prebuilt release path.
+# Resolves cosign immediately after the build mode is known, before any release
+# download begins, so the fetch happens up front and a machine that cannot get
+# cosign at all says so before other setup work runs rather than failing deep
+# inside verify_release_signature. Only runs for modes that can reach the
+# prebuilt release path.
 preflight_check_cosign() {
   case "${BUILD_MODE}" in
     release|auto) ;;
     *) return 0 ;;
   esac
+  if ! signature_verification_enabled; then
+    warn "signature verification is disabled, the download will be checked against its published checksum only."
+    return 0
+  fi
   if command -v cosign >/dev/null 2>&1; then
+    COSIGN_BIN="cosign"
+    return 0
+  fi
+  prompt_cosign_choice
+  if ! signature_verification_enabled; then
+    return 0
+  fi
+  if ensure_cosign; then
     return 0
   fi
   COSIGN_MISSING_WARNED=1
   if [[ "${BUILD_MODE}" == "release" ]]; then
-    warn "cosign not found: --build-mode release verifies the downloaded binary's signature before running it, and this run will abort rather than use an unverified download."
+    warn "no usable cosign: --build-mode release verifies the downloaded binary's signature before running it, and this run will abort rather than use an unverified download."
   else
-    warn "cosign not found: the release path cannot verify the downloaded binary's signature, so this run will fall back to a source build."
+    warn "no usable cosign: the release path cannot verify the downloaded binary's signature, so this run will fall back to a source build."
   fi
   warn "Install cosign: https://docs.sigstore.dev/system_config/installation"
 }
@@ -404,19 +438,124 @@ resolve_signer_identity() {
   fi
 }
 
+# Asks whether to fetch cosign when the contributor has none. Interactive input
+# only: a non-interactive run has nobody to ask, so it leaves the fetch in place
+# rather than silently dropping verification. Use --skip-signature-verification
+# to opt out there.
+prompt_cosign_choice() {
+  if [[ ! -t 0 ]]; then
+    return 0
+  fi
+  local choice
+  cat <<'EOF'
+
+  cosign is not installed, so this run cannot verify the ceremony binary's signature.
+
+  The download is also checked against a published SHA256, but that checksum comes from
+  the same release page as the binary, so only the signature proves the binary was built
+  by the release workflow.
+
+  1) Download cosign for this run (about 130 MB, kept in a temp dir, removed on exit)
+  2) Continue without verifying the signature
+
+EOF
+  while true; do
+    printf '  Enter your choice [1-2]: '
+    read -r choice
+    case "${choice}" in
+      1)
+        return 0
+        ;;
+      2)
+        SKIP_SIGNATURE_VERIFICATION=1
+        warn "continuing without signature verification at your request, the download is checksum-only."
+        return 0
+        ;;
+      *)
+        warn "invalid choice, enter 1 or 2"
+        ;;
+    esac
+  done
+}
+
+# Whether this run should verify the release signature at all.
+signature_verification_enabled() {
+  [[ "${SKIP_SIGNATURE_VERIFICATION}" != "1" ]]
+}
+
+# Upstream's published checksums for COSIGN_VERSION, one per platform this
+# script supports. macOS ships bash 3.2, which has no associative arrays, so
+# this is a case rather than a map.
+cosign_expected_sha256() {
+  case "$1-$2" in
+    darwin-amd64) printf '%s\n' '2347488e5d5b25336644024dfeca5601b190e91197a71a917bda44744aff106c' ;;
+    darwin-arm64) printf '%s\n' '5cf948c2f4dfe59687bdd0b8523709067383e03982cc543475c8a7dc70e92a76' ;;
+    linux-amd64) printf '%s\n' '4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71' ;;
+    linux-arm64) printf '%s\n' 'c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a' ;;
+    *) return 1 ;;
+  esac
+}
+
+# Resolves the cosign used to verify the release signature, preferring one the
+# contributor already has and otherwise fetching the pinned build. Sets
+# COSIGN_BIN and returns 0 on success, returns 1 (after warning) when no usable
+# cosign could be obtained. Memoized, so repeated calls cost nothing.
+#
+# The fetched binary is checked against cosign_expected_sha256 before it runs.
+# That digest lives in this script, so a fetched cosign is no more trusted than
+# the script itself: an attacker who could substitute the script could equally
+# well skip the verification altogether, so fetching adds no new trust root.
+ensure_cosign() {
+  if [[ -n "${COSIGN_BIN}" ]]; then
+    return 0
+  fi
+  if command -v cosign >/dev/null 2>&1; then
+    COSIGN_BIN="cosign"
+    return 0
+  fi
+  if ! require_cmd curl; then
+    warn "curl is required to fetch cosign, cannot verify the release signature."
+    return 1
+  fi
+  detect_platform
+  local want
+  if ! want="$(cosign_expected_sha256 "${GOOS}" "${GOARCH}")"; then
+    warn "no pinned cosign checksum for ${GOOS}/${GOARCH}, cannot verify the release signature."
+    return 1
+  fi
+  COSIGN_DIR="$(mktemp -d)"
+  trap cleanup EXIT
+  local dest="${COSIGN_DIR}/cosign"
+  log "cosign not installed, fetching the pinned ${COSIGN_VERSION} build to verify the release signature"
+  if ! curl -fL --progress-bar "${COSIGN_DOWNLOAD_BASE}/${COSIGN_VERSION}/cosign-${GOOS}-${GOARCH}" -o "${dest}"; then
+    warn "could not download cosign ${COSIGN_VERSION} for ${GOOS}/${GOARCH}."
+    return 1
+  fi
+  local got
+  got="$(file_sha256 "${dest}" | tr '[:upper:]' '[:lower:]')"
+  # A mismatch means the fetched cosign is not the pinned build, so treat it the
+  # same as a tampered release artifact and stop rather than falling back.
+  if [[ -z "${got}" || "${got}" != "${want}" ]]; then
+    fail "fetched cosign ${COSIGN_VERSION} does not match its pinned checksum, refusing to use it"
+  fi
+  chmod 0755 "${dest}"
+  COSIGN_BIN="${dest}"
+  return 0
+}
+
 # Verify a detached keyless-cosign signature bundle for a release artifact.
 # Returns 0 on success, 1 if cosign is unavailable (caller may fall back to a
 # source build), 2 if verification fails (a tampering signal, caller must abort).
 verify_release_signature() {
   local bundle="$1" artifact="$2" identity_flag="$3" identity_value="$4"
-  if ! command -v cosign >/dev/null 2>&1; then
+  if ! ensure_cosign; then
     if [[ "${COSIGN_MISSING_WARNED}" -eq 0 ]]; then
-      warn "cosign not found, cannot verify the release signature."
+      warn "no usable cosign, cannot verify the release signature."
       warn "Install cosign (https://docs.sigstore.dev/system_config/installation) or rerun with --build-mode local."
     fi
     return 1
   fi
-  if ! cosign verify-blob \
+  if ! "${COSIGN_BIN}" verify-blob \
     --bundle "${bundle}" \
     "${identity_flag}" "${identity_value}" \
     --certificate-oidc-issuer "${CEREMONY_OIDC_ISSUER}" \
@@ -487,20 +626,24 @@ download_prebuilt_release() {
     fail "checksum verification failed for ${asset}"
   fi
 
-  resolve_signer_identity "${release_tag}"
-  log "Downloading ${asset}.cosign.bundle from ${release_tag}"
-  if ! curl -fL --progress-bar "${base_url}/${asset}.cosign.bundle" -o "${WORK_DIR}/${asset}.cosign.bundle"; then
-    warn "no cosign signature bundle published for ${asset}, refusing the prebuilt path"
-    return 1
+  if signature_verification_enabled; then
+    resolve_signer_identity "${release_tag}"
+    log "Downloading ${asset}.cosign.bundle from ${release_tag}"
+    if ! curl -fL --progress-bar "${base_url}/${asset}.cosign.bundle" -o "${WORK_DIR}/${asset}.cosign.bundle"; then
+      warn "no cosign signature bundle published for ${asset}, refusing the prebuilt path"
+      return 1
+    fi
+    local vrc=0
+    verify_release_signature "${WORK_DIR}/${asset}.cosign.bundle" "${WORK_DIR}/${asset}" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || vrc=$?
+    if [[ "${vrc}" -eq 2 ]]; then
+      fail "release signature verification FAILED for ${asset}, the download may be tampered with, aborting"
+    elif [[ "${vrc}" -ne 0 ]]; then
+      return 1
+    fi
+    log "Verified release signature for ${asset}"
+  else
+    warn "SIGNATURE NOT VERIFIED for ${asset}. The checksum matched, but a checksum served alongside the binary does not prove who built it."
   fi
-  local vrc=0
-  verify_release_signature "${WORK_DIR}/${asset}.cosign.bundle" "${WORK_DIR}/${asset}" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || vrc=$?
-  if [[ "${vrc}" -eq 2 ]]; then
-    fail "release signature verification FAILED for ${asset}, the download may be tampered with, aborting"
-  elif [[ "${vrc}" -ne 0 ]]; then
-    return 1
-  fi
-  log "Verified release signature for ${asset}"
 
   # When the contributor did not choose a config, fetch the config published
   # with this release and verify it with the same pinned identity as the binary.
@@ -583,7 +726,7 @@ run_repo_quickstart() {
     prepare_config
   fi
   clone_source_repo
-  local args=(circuit-setup/contribute_quickstart.sh --config "${CONFIG_PATH}" --coordinator-url "${COORDINATOR_URL}" --build-mode "${mode}" --release-repo "${RELEASE_REPO}")
+  local args=(circuit-setup/contribute_quickstart.sh --config "${CONFIG_PATH}" --coordinator-url "${COORDINATOR_URL}" --build-mode "${mode}" --release-repo "${RELEASE_REPO}" --signer-repo "${SIGNER_REPO}")
   if [[ -n "${QUIET}" ]]; then
     args+=(--quiet)
   fi
@@ -618,7 +761,7 @@ main() {
       if [[ "${CONFIG_EXPLICIT}" == "1" ]]; then
         prepare_config
       fi
-      download_prebuilt_release || fail "failed to download a prebuilt ceremony binary"
+      download_prebuilt_release || fail "could not obtain a signature-verified ceremony binary, see the warnings above for the cause"
       run_binary
       ;;
     local)
