@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/consensys/gnark v0.14.0
 	github.com/consensys/gnark-crypto v0.19.2
-	github.com/testinprod-io/privacy-boost-protocol v0.0.0-20260318200347-7b2a01864a70
+	github.com/testinprod-io/privacy-boost-protocol v0.0.0-20260831100138-9e3f34e1a91c
 	github.com/worldcoin/ptau-deserializer v0.2.0
 )
 
