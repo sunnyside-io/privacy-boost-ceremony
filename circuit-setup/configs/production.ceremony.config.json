@@ -15,8 +15,7 @@
     "clientId": "Ov23li3FTPDz0l4USJ3C"
   },
   "artifacts": {
-    "provider": "filesystem",
-    "rootDir": "./circuit-setup/.state/prod-ceremony-2026-01/artifacts"
+    "provider": "filesystem"
   },
   "phase1": {
     "sourceUrl": "https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_{power}.ptau",
@@ -44,10 +43,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "s6",
-      "name": "s6",
+      "id": "s5",
+      "name": "s5",
       "type": "epoch",
-      "batchSize": 6,
+      "batchSize": 5,
       "maxInputsPerTransfer": 2,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -70,10 +69,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "s26",
-      "name": "s26",
+      "id": "s25",
+      "name": "s25",
       "type": "epoch",
-      "batchSize": 26,
+      "batchSize": 25,
       "maxInputsPerTransfer": 2,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -174,12 +173,12 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "w64",
-      "name": "w64",
+      "id": "w51",
+      "name": "w51",
       "type": "epoch",
       "batchSize": 1,
       "maxInputsPerTransfer": 15,
-      "maxOutputsPerTransfer": 64,
+      "maxOutputsPerTransfer": 51,
       "depth": 24,
       "authDepth": 20,
       "maxFeeTokens": 4,
@@ -187,12 +186,12 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "w256",
-      "name": "w256",
+      "id": "w201",
+      "name": "w201",
       "type": "epoch",
       "batchSize": 1,
       "maxInputsPerTransfer": 15,
-      "maxOutputsPerTransfer": 256,
+      "maxOutputsPerTransfer": 201,
       "depth": 24,
       "authDepth": 20,
       "maxFeeTokens": 4,
@@ -208,18 +207,18 @@
       "maxTrees": 16
     },
     {
-      "id": "d5",
-      "name": "d5",
+      "id": "d4",
+      "name": "d4",
       "type": "deposit",
-      "batchSize": 5,
+      "batchSize": 4,
       "depth": 24,
       "maxTrees": 16
     },
     {
-      "id": "d17",
-      "name": "d17",
+      "id": "d14",
+      "name": "d14",
       "type": "deposit",
-      "batchSize": 17,
+      "batchSize": 14,
       "depth": 24,
       "maxTrees": 16
     },
