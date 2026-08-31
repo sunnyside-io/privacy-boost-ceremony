@@ -18,9 +18,11 @@ import (
 type CircuitType string
 
 const (
-	CircuitTypeEpoch   CircuitType = "epoch"
-	CircuitTypeDeposit CircuitType = "deposit"
-	CircuitTypeForced  CircuitType = "forced"
+	CircuitTypeEpoch     CircuitType = "epoch"
+	CircuitTypeDeposit   CircuitType = "deposit"
+	CircuitTypeForced    CircuitType = "forced"
+	CircuitTypePortal    CircuitType = "portal"
+	CircuitTypeGiftClaim CircuitType = "gift_claim"
 )
 
 type CircuitSpec struct {
@@ -160,6 +162,14 @@ func newCircuit(spec CircuitSpec) (frontend.Circuit, error) {
 		return appcircuits.NewDepositEpochCircuit(spec.BatchSize, spec.Depth, spec.MaxTrees), nil
 	case CircuitTypeForced:
 		return appcircuits.NewForcedWithdrawCircuit(spec.MaxInputs, spec.Depth, spec.AuthDepth, spec.MaxTrees, spec.MaxAuthTrees), nil
+	case CircuitTypePortal:
+		// Portal deposits take the same three shape dimensions as a plain deposit
+		// epoch: slots per batch, note-tree depth, and note roots per proof.
+		return appcircuits.NewDepositPortalCircuit(spec.BatchSize, spec.Depth, spec.MaxTrees), nil
+	case CircuitTypeGiftClaim:
+		// A gift claim additionally proves a sender authorization path, so it
+		// consumes AuthDepth and MaxAuthTrees on top of the note-tree dimensions.
+		return appcircuits.NewGiftClaimCircuit(spec.BatchSize, spec.Depth, spec.MaxTrees, spec.MaxAuthTrees, spec.AuthDepth), nil
 	default:
 		return nil, fmt.Errorf("unsupported circuit type: %s", spec.Type)
 	}

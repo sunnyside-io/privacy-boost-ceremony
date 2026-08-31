@@ -13,13 +13,15 @@ const (
 	CeremonyStateFinalized   CeremonyState = "finalized"
 )
 
-// CircuitType identifies the kind of circuit (epoch, deposit, forced).
+// CircuitType identifies the kind of circuit (epoch, deposit, forced, portal, gift_claim).
 type CircuitType string
 
 const (
-	CircuitTypeEpoch   CircuitType = "epoch"
-	CircuitTypeDeposit CircuitType = "deposit"
-	CircuitTypeForced  CircuitType = "forced"
+	CircuitTypeEpoch     CircuitType = "epoch"
+	CircuitTypeDeposit   CircuitType = "deposit"
+	CircuitTypeForced    CircuitType = "forced"
+	CircuitTypePortal    CircuitType = "portal"
+	CircuitTypeGiftClaim CircuitType = "gift_claim"
 )
 
 // AccessMode controls ceremony visibility (private allowlist vs public).
