@@ -29,6 +29,9 @@ CONFIG_URL="${CEREMONY_CONFIG_URL:-https://raw.githubusercontent.com/${RELEASE_R
 CONFIG_URL_EXPLICIT=0
 CONFIG_EXPLICIT=0
 CONFIG_PATH="${CEREMONY_CONFIG_PATH:-}"
+# Which ceremony round to contribute to. Empty means the current round,
+# whichever one the newest release carries.
+ROUND="${CEREMONY_ROUND:-}"
 COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-$DEFAULT_COORDINATOR_URL}"
 RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
@@ -88,6 +91,7 @@ Environment overrides:
   CEREMONY_SOURCE_REF=...        Default: main
   CEREMONY_BUILD_MODE=...        auto, release, local, or docker
   CEREMONY_RELEASE_VERSION=...   GitHub release tag or version
+  CEREMONY_ROUND=...             Round to contribute to, e.g. 2026-02 (defaults to the current round)
   CEREMONY_WORK_DIR=...          Persistent local state directory
   CEREMONY_ALLOW_INSECURE_HTTP=0 Re-arm the plaintext-HTTP guard (enabled by default while the coordinator has no TLS)
   CEREMONY_QUIET=1              Pass --quiet to ceremony contribute
@@ -124,6 +128,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release-version)
       RELEASE_VERSION="$2"
+      shift 2
+      ;;
+    --round)
+      ROUND="$2"
       shift 2
       ;;
     --release-repo)
@@ -232,6 +240,17 @@ normalize_release_tag() {
     return 0
   fi
   printf 'ceremony/v%s\n' "${version}"
+}
+
+# Accepts either the full round id or just its date suffix, so --round 2026-01
+# and --round prod-ceremony-2026-01 both resolve to the same round.
+normalize_round_id() {
+  local round="$1"
+  if [[ "${round}" == prod-ceremony-* ]]; then
+    printf '%s\n' "${round}"
+    return 0
+  fi
+  printf 'prod-ceremony-%s\n' "${round}"
 }
 
 normalize_build_mode() {
@@ -378,13 +397,11 @@ prepare_config() {
   require_cmd curl || fail "curl is required to download the ceremony config"
   CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
 
-  # Prefer the config published with the release tag, the same source the
-  # prebuilt path uses. This is what keeps a build-from-source contributor on
-  # the same pinned round as everyone else instead of on whatever main holds.
+  # Prefer a round-scoped config over whatever main currently holds. That is
+  # what keeps a build-from-source contributor on the same round as everyone
+  # else instead of on the moving target main represents.
   if [[ "${CONFIG_URL_EXPLICIT}" == "0" ]]; then
-    local pinned_tag=""
-    if pinned_tag="$(resolve_release_tag)" && [[ -n "${pinned_tag}" ]] &&
-      fetch_pinned_config "${pinned_tag}" "${CONFIG_PATH}"; then
+    if resolve_round_config; then
       return 0
     fi
     warn "falling back to the config on main, which tracks the CURRENT round only and carries no signature"
@@ -668,6 +685,59 @@ fetch_pinned_config() {
   cp "${tmp}/ceremony.config.json" "${dest}"
   rm -rf "${tmp}"
   log "Using pinned config published with ${release_tag}"
+}
+
+# Reads the round id out of a ceremony config. Mirrors resolve_release_tag's
+# python3-preferred, grep-fallback shape so a host without python3 still works.
+config_round_id() {
+  local file="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import json
+import sys
+
+with open(sys.argv[1]) as handle:
+    print(json.load(handle).get("id", ""))
+' "${file}" 2>/dev/null || true
+    return 0
+  fi
+  grep -oE '"id":[[:space:]]*"[^"]*"' "${file}" 2>/dev/null | head -n 1 |
+    sed -E 's/.*"id":[[:space:]]*"([^"]*)".*/\1/' || true
+}
+
+# Resolves the config for the requested round, or for the current round when
+# --round was not given.
+#
+# Signed release asset first. A past round then falls back to its round-scoped
+# file in the tree, because only the round that was CURRENT at release time was
+# ever published as an asset, so an older round is reachable only from the tree
+# and only unsigned. Returns 1 so the caller can apply its own fallback.
+resolve_round_config() {
+  local pinned_tag="" carried="" round_url=""
+
+  if [[ -n "${ROUND}" ]]; then
+    ROUND="$(normalize_round_id "${ROUND}")"
+  fi
+
+  if pinned_tag="$(resolve_release_tag)" && [[ -n "${pinned_tag}" ]] &&
+    fetch_pinned_config "${pinned_tag}" "${CONFIG_PATH}"; then
+    carried="$(config_round_id "${CONFIG_PATH}")"
+    if [[ -z "${ROUND}" || "${ROUND}" == "${carried}" ]]; then
+      return 0
+    fi
+    warn "release ${pinned_tag} carries round ${carried:-unknown}, not ${ROUND}"
+  fi
+
+  if [[ -z "${ROUND}" ]]; then
+    return 1
+  fi
+
+  round_url="https://raw.githubusercontent.com/${RELEASE_REPO}/${SOURCE_REF}/circuit-setup/configs/${ROUND}.config.json"
+  log "Downloading round config from ${round_url}"
+  if ! curl -fL --progress-bar "${round_url}" -o "${CONFIG_PATH}"; then
+    fail "no config found for round ${ROUND}, neither a signed release asset nor a round-scoped file in the tree"
+  fi
+  warn "round ${ROUND} config came from the tree and carries NO signature"
 }
 
 download_prebuilt_release() {
