@@ -15,6 +15,9 @@ DEFAULT_RELEASE_REPO="sunnyside-io/privacy-boost-ceremony"
 DEFAULT_SIGNER_REPO="sunnyside-io/privacy-boost-backend"
 DEFAULT_SOURCE_REF="main"
 DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
+# The config asset name published on every release. Round-independent on
+# purpose: each release carries its OWN round's config under this one name.
+DEFAULT_CONFIG_ASSET="production.ceremony.config.json"
 DEFAULT_RUN_DIR="${PWD}/privacy-boost-ceremony"
 # The round this script currently serves. Override per round with --coordinator-url.
 DEFAULT_COORDINATOR_URL="http://68.183.252.249:8790"
@@ -374,6 +377,19 @@ prepare_config() {
 
   require_cmd curl || fail "curl is required to download the ceremony config"
   CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
+
+  # Prefer the config published with the release tag, the same source the
+  # prebuilt path uses. This is what keeps a build-from-source contributor on
+  # the same pinned round as everyone else instead of on whatever main holds.
+  if [[ "${CONFIG_URL_EXPLICIT}" == "0" ]]; then
+    local pinned_tag=""
+    if pinned_tag="$(resolve_release_tag)" && [[ -n "${pinned_tag}" ]] &&
+      fetch_pinned_config "${pinned_tag}" "${CONFIG_PATH}"; then
+      return 0
+    fi
+    warn "falling back to the config on main, which tracks the CURRENT round only and carries no signature"
+  fi
+
   log "Downloading ceremony config from ${CONFIG_URL}"
   curl -fL --progress-bar "${CONFIG_URL}" -o "${CONFIG_PATH}"
 }
@@ -605,6 +621,55 @@ for release in json.load(sys.stdin):
   printf '%s\n' "${tag}"
 }
 
+# Downloads a round's ceremony config from its release tag and verifies it
+# against the signer identity pinned for that tag.
+#
+# The release, not main, is the source of truth for a round's config. main
+# carries only the CURRENT round, so resolving from main hands a past-round
+# contributor the wrong circuit shapes, and it leaves a closed round's config
+# mutable. Writes the verified config to $2.
+#
+# Returns 1 when the tag publishes no signed config or the signature could not
+# be checked, so each caller decides whether to fall back or refuse. A signature
+# that is present and BAD is fatal here rather than a return, because that is
+# tampering, not a missing artifact.
+fetch_pinned_config() {
+  local release_tag="$1" dest="$2"
+  local base_url tmp rc=0
+  base_url="https://github.com/${RELEASE_REPO}/releases/download/${release_tag}"
+  tmp="$(mktemp -d)"
+
+  log "Downloading signed config from ${release_tag}"
+  if ! curl -fL --progress-bar "${base_url}/${DEFAULT_CONFIG_ASSET}" -o "${tmp}/ceremony.config.json"; then
+    warn "no signed config published with ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+  if ! curl -fL --progress-bar "${base_url}/${DEFAULT_CONFIG_ASSET}.cosign.bundle" -o "${tmp}/ceremony.config.json.cosign.bundle"; then
+    warn "no signed config bundle published with ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  # Resolved here rather than inherited: the binary path sets these only when
+  # signature verification is enabled, and this helper is also reached from the
+  # build-from-source path where that block never ran.
+  resolve_signer_identity "${release_tag}"
+  verify_release_signature "${tmp}/ceremony.config.json.cosign.bundle" "${tmp}/ceremony.config.json" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || rc=$?
+  if [[ "${rc}" -eq 2 ]]; then
+    rm -rf "${tmp}"
+    fail "release config signature verification FAILED for ${release_tag}, the config may be tampered with, aborting"
+  elif [[ "${rc}" -ne 0 ]]; then
+    warn "could not verify the signed release config for ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  cp "${tmp}/ceremony.config.json" "${dest}"
+  rm -rf "${tmp}"
+  log "Using pinned config published with ${release_tag}"
+}
+
 download_prebuilt_release() {
   require_cmd curl || return 1
   require_cmd tar || return 1
@@ -645,30 +710,15 @@ download_prebuilt_release() {
     warn "SIGNATURE NOT VERIFIED for ${asset}. The checksum matched, but a checksum served alongside the binary does not prove who built it."
   fi
 
-  # When the contributor did not choose a config, fetch the config published
-  # with this release and verify it with the same pinned identity as the binary.
-  # Never leave a prebuilt release paired with the mutable config from main.
+  # When the contributor did not choose a config, pair the binary with the config
+  # published alongside it. Never leave a prebuilt release paired with the
+  # mutable config from main.
   if [[ "${CONFIG_EXPLICIT}" == "0" ]]; then
-    log "Downloading signed config from ${release_tag}"
-    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json" -o "${WORK_DIR}/ceremony.config.json"; then
-      warn "no signed config published with ${release_tag}, refusing the prebuilt path"
+    if ! fetch_pinned_config "${release_tag}" "${RUN_DIR}/ceremony.config.json"; then
+      warn "refusing the prebuilt path without a verified config"
       return 1
     fi
-    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json.cosign.bundle" -o "${WORK_DIR}/ceremony.config.json.cosign.bundle"; then
-      warn "no signed config bundle published with ${release_tag}, refusing the prebuilt path"
-      return 1
-    fi
-    local cvrc=0
-    verify_release_signature "${WORK_DIR}/ceremony.config.json.cosign.bundle" "${WORK_DIR}/ceremony.config.json" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || cvrc=$?
-    if [[ "${cvrc}" -eq 2 ]]; then
-      fail "release config signature verification FAILED, the config may be tampered with, aborting"
-    elif [[ "${cvrc}" -ne 0 ]]; then
-      warn "could not verify the signed release config, refusing the prebuilt path"
-      return 1
-    fi
-    cp "${WORK_DIR}/ceremony.config.json" "${RUN_DIR}/ceremony.config.json"
     CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
-    log "Using pinned config published with ${release_tag}"
   fi
 
   tar -xzf "${WORK_DIR}/${asset}" -C "${WORK_DIR}"
