@@ -1,10 +1,10 @@
 {
-  "id": "prod-ceremony-2026-02",
-  "title": "Privacy Boost Production Ceremony (second round)",
+  "id": "prod-ceremony-2026-01",
+  "title": "Privacy Boost Production Ceremony (first round, March 2026)",
   "description": "Production public ceremony with finalized deposit+epoch+forced circuit matrix",
   "accessMode": "public",
   "production": true,
-  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-02",
+  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-01",
   "server": {
     "listenAddr": "127.0.0.1:8787",
     "sessionTtlMinutes": 60,
@@ -12,20 +12,25 @@
   },
   "githubAuth": {
     "enabled": true,
-    "clientId": "Ov23li3FTPDz0l4USJ3C"
+    "clientId": "REPLACE_WITH_GITHUB_OAUTH_APP_CLIENT_ID"
   },
   "artifacts": {
-    "provider": "filesystem"
+    "provider": "filesystem",
+    "rootDir": "./circuit-setup/.state/prod-ceremony-2026-01/artifacts"
   },
   "phase1": {
     "sourceUrl": "https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_{power}.ptau",
     "expectedSha256ByPower": {
+      "14": "3ca1149e9349b22b0ee0649399cfb787677129b7b1189d1899fc0d615d9583db",
       "15": "4a8eb5a754ed4710d6ad603c2e1a89c72325a448e4474f8694d2c71c7c272f3d",
       "16": "ed3622a7c79b0b49aadd134ebbc5b77df8c8c59bccebdfd0d9bf2c1a51561cf9",
       "17": "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c",
       "18": "9693220206afab749e3d88d4ab5fdf5d36120ea102e7e587ccea0e7a5208e711",
       "19": "d0cadfb7d5bad6c5e0b012fb1c4bbaa3cc98fe249988f9f99d1818175e4c2015",
-      "20": "560412532a1205145d5f21585274fb2cef61273496ddc7186aec855aab01a8cd"
+      "20": "560412532a1205145d5f21585274fb2cef61273496ddc7186aec855aab01a8cd",
+      "21": "b4131202088141088d83fc05d654a142b51117df0960568613069e0719e7645a",
+      "22": "9f50df02e370796098cecbb025d46a44c7165cac8bc5ebedd76d97f1129d9653",
+      "23": "05085994c8aa34e4925585202e178e09fb8acc04e9565311751e8a04dec81cb1"
     }
   },
   "circuits": [
@@ -43,10 +48,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "s5",
-      "name": "s5",
+      "id": "s4",
+      "name": "s4",
       "type": "epoch",
-      "batchSize": 5,
+      "batchSize": 4,
       "maxInputsPerTransfer": 2,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -56,10 +61,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "s12",
-      "name": "s12",
+      "id": "s8",
+      "name": "s8",
       "type": "epoch",
-      "batchSize": 12,
+      "batchSize": 8,
       "maxInputsPerTransfer": 2,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -69,10 +74,49 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "s25",
-      "name": "s25",
+      "id": "s16",
+      "name": "s16",
       "type": "epoch",
-      "batchSize": 25,
+      "batchSize": 16,
+      "maxInputsPerTransfer": 2,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
+      "id": "s32",
+      "name": "s32",
+      "type": "epoch",
+      "batchSize": 32,
+      "maxInputsPerTransfer": 2,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
+      "id": "s64",
+      "name": "s64",
+      "type": "epoch",
+      "batchSize": 64,
+      "maxInputsPerTransfer": 2,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
+      "id": "s100",
+      "name": "s100",
+      "type": "epoch",
+      "batchSize": 100,
       "maxInputsPerTransfer": 2,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -134,10 +178,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "l3",
-      "name": "l3",
+      "id": "l4",
+      "name": "l4",
       "type": "epoch",
-      "batchSize": 3,
+      "batchSize": 4,
       "maxInputsPerTransfer": 15,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -147,10 +191,10 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "l6",
-      "name": "l6",
+      "id": "l8",
+      "name": "l8",
       "type": "epoch",
-      "batchSize": 6,
+      "batchSize": 8,
       "maxInputsPerTransfer": 15,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -173,32 +217,6 @@
       "maxAuthTrees": 16
     },
     {
-      "id": "w51",
-      "name": "w51",
-      "type": "epoch",
-      "batchSize": 1,
-      "maxInputsPerTransfer": 15,
-      "maxOutputsPerTransfer": 51,
-      "depth": 24,
-      "authDepth": 20,
-      "maxFeeTokens": 4,
-      "maxTrees": 16,
-      "maxAuthTrees": 16
-    },
-    {
-      "id": "w201",
-      "name": "w201",
-      "type": "epoch",
-      "batchSize": 1,
-      "maxInputsPerTransfer": 15,
-      "maxOutputsPerTransfer": 201,
-      "depth": 24,
-      "authDepth": 20,
-      "maxFeeTokens": 4,
-      "maxTrees": 16,
-      "maxAuthTrees": 16
-    },
-    {
       "id": "d1",
       "name": "d1",
       "type": "deposit",
@@ -207,63 +225,27 @@
       "maxTrees": 16
     },
     {
-      "id": "d4",
-      "name": "d4",
+      "id": "d8",
+      "name": "d8",
       "type": "deposit",
-      "batchSize": 4,
+      "batchSize": 8,
       "depth": 24,
       "maxTrees": 16
     },
     {
-      "id": "d14",
-      "name": "d14",
+      "id": "d32",
+      "name": "d32",
       "type": "deposit",
-      "batchSize": 14,
+      "batchSize": 32,
       "depth": 24,
       "maxTrees": 16
     },
     {
-      "id": "p1",
-      "name": "p1",
-      "type": "portal",
-      "batchSize": 1,
-      "depth": 24,
-      "maxTrees": 16
-    },
-    {
-      "id": "p6",
-      "name": "p6",
-      "type": "portal",
-      "batchSize": 6,
-      "depth": 24,
-      "maxTrees": 16
-    },
-    {
-      "id": "f13",
-      "name": "f13",
+      "id": "f8",
+      "name": "f8",
       "type": "forced",
-      "batchSize": 13,
-      "maxInputs": 13,
-      "depth": 24,
-      "authDepth": 20,
-      "maxTrees": 16,
-      "maxAuthTrees": 16
-    },
-    {
-      "id": "g1",
-      "name": "g1",
-      "type": "gift_claim",
-      "batchSize": 1,
-      "depth": 24,
-      "authDepth": 20,
-      "maxTrees": 16,
-      "maxAuthTrees": 16
-    },
-    {
-      "id": "g3",
-      "name": "g3",
-      "type": "gift_claim",
-      "batchSize": 3,
+      "batchSize": 8,
+      "maxInputs": 8,
       "depth": 24,
       "authDepth": 20,
       "maxTrees": 16,

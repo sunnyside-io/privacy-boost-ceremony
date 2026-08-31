@@ -6,9 +6,14 @@ The ceremony uses Groth16 multi-party computation (MPC) via [gnark](https://gith
 
 ## Status
 
-**Privacy Boost V1 Production Ceremony is complete.**
+There have been two production ceremony rounds. Each one is recorded under [`rounds/`](rounds/), with its circuit shapes, release tags, config file and config checksum.
 
-The public bundle and derived keys are available for download:
+- [First round, `prod-ceremony-2026-01`](rounds/2026-01.md). Complete.
+- [Second round, `prod-ceremony-2026-02`](rounds/2026-02.md). Open, and the round `contribute.sh` currently serves.
+
+`main` always carries the current round's config. Past rounds stay reachable through their own record above and through the release tag they ran under.
+
+**The first round is complete.** Its public bundle and derived keys are available for download:
 
 - **Public bundle:** https://file.ceremony.privacyboost.io/prod-20260401-public.tar.gz
 - **Keys:** https://file.ceremony.privacyboost.io/prod-20260401-keys.tar.gz
