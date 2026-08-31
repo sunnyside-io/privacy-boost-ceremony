@@ -789,6 +789,21 @@ download_prebuilt_release() {
       return 1
     fi
     CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
+
+    # A release carries exactly one round's config, and the binary is pinned to
+    # that same tag, so an explicit --round that names a different round cannot
+    # be honored here. Refuse instead of handing back a round the contributor
+    # did not ask for; auto mode then falls through to a source build, which
+    # resolves the requested round properly.
+    if [[ -n "${ROUND}" ]]; then
+      local want carried
+      want="$(normalize_round_id "${ROUND}")"
+      carried="$(config_round_id "${CONFIG_PATH}")"
+      if [[ "${want}" != "${carried}" ]]; then
+        warn "release ${release_tag} carries round ${carried:-unknown}, not ${want}, so --round cannot be satisfied from a published release"
+        return 1
+      fi
+    fi
   fi
 
   tar -xzf "${WORK_DIR}/${asset}" -C "${WORK_DIR}"
