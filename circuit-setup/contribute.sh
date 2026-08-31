@@ -15,6 +15,9 @@ DEFAULT_RELEASE_REPO="sunnyside-io/privacy-boost-ceremony"
 DEFAULT_SIGNER_REPO="sunnyside-io/privacy-boost-backend"
 DEFAULT_SOURCE_REF="main"
 DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
+# The config asset name published on every release. Round-independent on
+# purpose: each release carries its OWN round's config under this one name.
+DEFAULT_CONFIG_ASSET="production.ceremony.config.json"
 DEFAULT_RUN_DIR="${PWD}/privacy-boost-ceremony"
 # The round this script currently serves. Override per round with --coordinator-url.
 DEFAULT_COORDINATOR_URL="http://68.183.252.249:8790"
@@ -26,6 +29,9 @@ CONFIG_URL="${CEREMONY_CONFIG_URL:-https://raw.githubusercontent.com/${RELEASE_R
 CONFIG_URL_EXPLICIT=0
 CONFIG_EXPLICIT=0
 CONFIG_PATH="${CEREMONY_CONFIG_PATH:-}"
+# Which ceremony round to contribute to. Empty means the current round,
+# whichever one the newest release carries.
+ROUND="${CEREMONY_ROUND:-}"
 COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-$DEFAULT_COORDINATOR_URL}"
 RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
@@ -85,6 +91,7 @@ Environment overrides:
   CEREMONY_SOURCE_REF=...        Default: main
   CEREMONY_BUILD_MODE=...        auto, release, local, or docker
   CEREMONY_RELEASE_VERSION=...   GitHub release tag or version
+  CEREMONY_ROUND=...             Round to contribute to, e.g. 2026-02 (defaults to the current round)
   CEREMONY_WORK_DIR=...          Persistent local state directory
   CEREMONY_ALLOW_INSECURE_HTTP=0 Re-arm the plaintext-HTTP guard (enabled by default while the coordinator has no TLS)
   CEREMONY_QUIET=1              Pass --quiet to ceremony contribute
@@ -121,6 +128,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release-version)
       RELEASE_VERSION="$2"
+      shift 2
+      ;;
+    --round)
+      ROUND="$2"
       shift 2
       ;;
     --release-repo)
@@ -229,6 +240,17 @@ normalize_release_tag() {
     return 0
   fi
   printf 'ceremony/v%s\n' "${version}"
+}
+
+# Accepts either the full round id or just its date suffix, so --round 2026-01
+# and --round prod-ceremony-2026-01 both resolve to the same round.
+normalize_round_id() {
+  local round="$1"
+  if [[ "${round}" == prod-ceremony-* ]]; then
+    printf '%s\n' "${round}"
+    return 0
+  fi
+  printf 'prod-ceremony-%s\n' "${round}"
 }
 
 normalize_build_mode() {
@@ -374,6 +396,17 @@ prepare_config() {
 
   require_cmd curl || fail "curl is required to download the ceremony config"
   CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
+
+  # Prefer a round-scoped config over whatever main currently holds. That is
+  # what keeps a build-from-source contributor on the same round as everyone
+  # else instead of on the moving target main represents.
+  if [[ "${CONFIG_URL_EXPLICIT}" == "0" ]]; then
+    if resolve_round_config; then
+      return 0
+    fi
+    warn "falling back to the config on main, which tracks the CURRENT round only and carries no signature"
+  fi
+
   log "Downloading ceremony config from ${CONFIG_URL}"
   curl -fL --progress-bar "${CONFIG_URL}" -o "${CONFIG_PATH}"
 }
@@ -605,6 +638,108 @@ for release in json.load(sys.stdin):
   printf '%s\n' "${tag}"
 }
 
+# Downloads a round's ceremony config from its release tag and verifies it
+# against the signer identity pinned for that tag.
+#
+# The release, not main, is the source of truth for a round's config. main
+# carries only the CURRENT round, so resolving from main hands a past-round
+# contributor the wrong circuit shapes, and it leaves a closed round's config
+# mutable. Writes the verified config to $2.
+#
+# Returns 1 when the tag publishes no signed config or the signature could not
+# be checked, so each caller decides whether to fall back or refuse. A signature
+# that is present and BAD is fatal here rather than a return, because that is
+# tampering, not a missing artifact.
+fetch_pinned_config() {
+  local release_tag="$1" dest="$2"
+  local base_url tmp rc=0
+  base_url="https://github.com/${RELEASE_REPO}/releases/download/${release_tag}"
+  tmp="$(mktemp -d)"
+
+  log "Downloading signed config from ${release_tag}"
+  if ! curl -fL --progress-bar "${base_url}/${DEFAULT_CONFIG_ASSET}" -o "${tmp}/ceremony.config.json"; then
+    warn "no signed config published with ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+  if ! curl -fL --progress-bar "${base_url}/${DEFAULT_CONFIG_ASSET}.cosign.bundle" -o "${tmp}/ceremony.config.json.cosign.bundle"; then
+    warn "no signed config bundle published with ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  # Resolved here rather than inherited: the binary path sets these only when
+  # signature verification is enabled, and this helper is also reached from the
+  # build-from-source path where that block never ran.
+  resolve_signer_identity "${release_tag}"
+  verify_release_signature "${tmp}/ceremony.config.json.cosign.bundle" "${tmp}/ceremony.config.json" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || rc=$?
+  if [[ "${rc}" -eq 2 ]]; then
+    rm -rf "${tmp}"
+    fail "release config signature verification FAILED for ${release_tag}, the config may be tampered with, aborting"
+  elif [[ "${rc}" -ne 0 ]]; then
+    warn "could not verify the signed release config for ${release_tag}"
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  cp "${tmp}/ceremony.config.json" "${dest}"
+  rm -rf "${tmp}"
+  log "Using pinned config published with ${release_tag}"
+}
+
+# Reads the round id out of a ceremony config. Mirrors resolve_release_tag's
+# python3-preferred, grep-fallback shape so a host without python3 still works.
+config_round_id() {
+  local file="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import json
+import sys
+
+with open(sys.argv[1]) as handle:
+    print(json.load(handle).get("id", ""))
+' "${file}" 2>/dev/null || true
+    return 0
+  fi
+  grep -oE '"id":[[:space:]]*"[^"]*"' "${file}" 2>/dev/null | head -n 1 |
+    sed -E 's/.*"id":[[:space:]]*"([^"]*)".*/\1/' || true
+}
+
+# Resolves the config for the requested round, or for the current round when
+# --round was not given.
+#
+# Signed release asset first. A past round then falls back to its round-scoped
+# file in the tree, because only the round that was CURRENT at release time was
+# ever published as an asset, so an older round is reachable only from the tree
+# and only unsigned. Returns 1 so the caller can apply its own fallback.
+resolve_round_config() {
+  local pinned_tag="" carried="" round_url=""
+
+  if [[ -n "${ROUND}" ]]; then
+    ROUND="$(normalize_round_id "${ROUND}")"
+  fi
+
+  if pinned_tag="$(resolve_release_tag)" && [[ -n "${pinned_tag}" ]] &&
+    fetch_pinned_config "${pinned_tag}" "${CONFIG_PATH}"; then
+    carried="$(config_round_id "${CONFIG_PATH}")"
+    if [[ -z "${ROUND}" || "${ROUND}" == "${carried}" ]]; then
+      return 0
+    fi
+    warn "release ${pinned_tag} carries round ${carried:-unknown}, not ${ROUND}"
+  fi
+
+  if [[ -z "${ROUND}" ]]; then
+    return 1
+  fi
+
+  round_url="https://raw.githubusercontent.com/${RELEASE_REPO}/${SOURCE_REF}/circuit-setup/configs/${ROUND}.config.json"
+  log "Downloading round config from ${round_url}"
+  if ! curl -fL --progress-bar "${round_url}" -o "${CONFIG_PATH}"; then
+    fail "no config found for round ${ROUND}, neither a signed release asset nor a round-scoped file in the tree"
+  fi
+  warn "round ${ROUND} config came from the tree and carries NO signature"
+}
+
 download_prebuilt_release() {
   require_cmd curl || return 1
   require_cmd tar || return 1
@@ -645,30 +780,30 @@ download_prebuilt_release() {
     warn "SIGNATURE NOT VERIFIED for ${asset}. The checksum matched, but a checksum served alongside the binary does not prove who built it."
   fi
 
-  # When the contributor did not choose a config, fetch the config published
-  # with this release and verify it with the same pinned identity as the binary.
-  # Never leave a prebuilt release paired with the mutable config from main.
+  # When the contributor did not choose a config, pair the binary with the config
+  # published alongside it. Never leave a prebuilt release paired with the
+  # mutable config from main.
   if [[ "${CONFIG_EXPLICIT}" == "0" ]]; then
-    log "Downloading signed config from ${release_tag}"
-    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json" -o "${WORK_DIR}/ceremony.config.json"; then
-      warn "no signed config published with ${release_tag}, refusing the prebuilt path"
+    if ! fetch_pinned_config "${release_tag}" "${RUN_DIR}/ceremony.config.json"; then
+      warn "refusing the prebuilt path without a verified config"
       return 1
     fi
-    if ! curl -fL --progress-bar "${base_url}/production.ceremony.config.json.cosign.bundle" -o "${WORK_DIR}/ceremony.config.json.cosign.bundle"; then
-      warn "no signed config bundle published with ${release_tag}, refusing the prebuilt path"
-      return 1
-    fi
-    local cvrc=0
-    verify_release_signature "${WORK_DIR}/ceremony.config.json.cosign.bundle" "${WORK_DIR}/ceremony.config.json" "${SIGNER_IDENTITY_FLAG}" "${SIGNER_IDENTITY_VALUE}" || cvrc=$?
-    if [[ "${cvrc}" -eq 2 ]]; then
-      fail "release config signature verification FAILED, the config may be tampered with, aborting"
-    elif [[ "${cvrc}" -ne 0 ]]; then
-      warn "could not verify the signed release config, refusing the prebuilt path"
-      return 1
-    fi
-    cp "${WORK_DIR}/ceremony.config.json" "${RUN_DIR}/ceremony.config.json"
     CONFIG_PATH="${RUN_DIR}/ceremony.config.json"
-    log "Using pinned config published with ${release_tag}"
+
+    # A release carries exactly one round's config, and the binary is pinned to
+    # that same tag, so an explicit --round that names a different round cannot
+    # be honored here. Refuse instead of handing back a round the contributor
+    # did not ask for; auto mode then falls through to a source build, which
+    # resolves the requested round properly.
+    if [[ -n "${ROUND}" ]]; then
+      local want carried
+      want="$(normalize_round_id "${ROUND}")"
+      carried="$(config_round_id "${CONFIG_PATH}")"
+      if [[ "${want}" != "${carried}" ]]; then
+        warn "release ${release_tag} carries round ${carried:-unknown}, not ${want}, so --round cannot be satisfied from a published release"
+        return 1
+      fi
+    fi
   fi
 
   tar -xzf "${WORK_DIR}/${asset}" -C "${WORK_DIR}"
