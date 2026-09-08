@@ -9,11 +9,18 @@ The ceremony uses Groth16 multi-party computation (MPC) via [gnark](https://gith
 There have been two production ceremony rounds. Each one is recorded under [`rounds/`](rounds/), with its circuit shapes, release tags, config file and config checksum.
 
 - [First round, `prod-ceremony-2026-01`](rounds/2026-01.md). Complete.
-- [Second round, `prod-ceremony-2026-02`](rounds/2026-02.md). Open, and the round `contribute.sh` currently serves.
+- [Second round, `prod-ceremony-2026-02`](rounds/2026-02.md). Complete. This is the round the current production keys come from.
 
 `main` always carries the current round's config. Past rounds stay reachable through their own record above and through the release tag they ran under.
 
-**The first round is complete.** Its public bundle and derived keys are available for download:
+**Both rounds are complete.** Each round's public bundle and derived keys are available for download.
+
+Second round, `prod-ceremony-2026-02`, 21 circuits and 490 contributions:
+
+- **Public bundle:** https://file.ceremony.privacyboost.io/prod-20260902-public.tar
+- **Keys:** https://file.ceremony.privacyboost.io/prod-20260902-keys.tar
+
+First round, `prod-ceremony-2026-01`, 18 circuits:
 
 - **Public bundle:** https://file.ceremony.privacyboost.io/prod-20260401-public.tar.gz
 - **Keys:** https://file.ceremony.privacyboost.io/prod-20260401-keys.tar.gz
@@ -27,7 +34,7 @@ go build -o ./bin/ceremony ./cmd/ceremony
 ./bin/ceremony verify-public --bundle-dir <BUNDLE_DIR>
 ```
 
-Full verification took under 30 hours on an M1 Pro MacBook.
+Full verification of the second round took just under 8 hours on an M1 Pro MacBook, covering all 21 circuits and 490 contributions, and not counting the time to download the bundle. That run reused an already-converted powers-of-tau cache, so allow roughly 3 more hours on a first run, when the verifier fetches about 2.4 GB of powers-of-tau files and converts them. The first round's bundle is about three times larger and its full verification took under 30 hours on the same machine.
 
 See [Public Verification](PUBLIC_VERIFICATION.md) for a detailed explanation of how verification works.
 

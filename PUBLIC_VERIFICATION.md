@@ -43,8 +43,8 @@ Re-derived keys are created in a temporary directory and deleted after verificat
 ### 1. Download and extract the public bundle
 
 ```bash
-curl -LO https://file.ceremony.privacyboost.io/prod-20260401-public.tar.gz
-tar xzf prod-20260401-public.tar.gz
+curl -LO https://file.ceremony.privacyboost.io/prod-20260902-public.tar
+tar xf prod-20260902-public.tar
 ```
 
 ### 2. Build the verification tool
@@ -59,7 +59,7 @@ go build -o ./bin/ceremony ./cmd/ceremony
 ./bin/ceremony verify-public --bundle-dir <BUNDLE_DIR>
 ```
 
-Full verification took under 30 hours on an M1 Pro MacBook.
+Full verification of the second round took just under 8 hours on an M1 Pro MacBook, covering all 21 circuits and 490 contributions, and not counting the time to download the bundle. That run reused an already-converted powers-of-tau cache, so allow roughly 3 more hours on a first run, when the verifier fetches about 2.4 GB of powers-of-tau files and converts them. The first round's bundle is about three times larger and its full verification took under 30 hours on the same machine.
 
 ### Flags
 
