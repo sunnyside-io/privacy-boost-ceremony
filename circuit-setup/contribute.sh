@@ -19,8 +19,6 @@ DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
 # purpose: each release carries its OWN round's config under this one name.
 DEFAULT_CONFIG_ASSET="production.ceremony.config.json"
 DEFAULT_RUN_DIR="${PWD}/privacy-boost-ceremony"
-# The round this script currently serves. Override per round with --coordinator-url.
-DEFAULT_COORDINATOR_URL="http://68.183.252.249:8790"
 
 RELEASE_REPO="${CEREMONY_RELEASE_REPO:-$DEFAULT_RELEASE_REPO}"
 SIGNER_REPO="${CEREMONY_SIGNER_REPO:-$DEFAULT_SIGNER_REPO}"
@@ -32,7 +30,7 @@ CONFIG_PATH="${CEREMONY_CONFIG_PATH:-}"
 # Which ceremony round to contribute to. Empty means the current round,
 # whichever one the newest release carries.
 ROUND="${CEREMONY_ROUND:-}"
-COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-$DEFAULT_COORDINATOR_URL}"
+COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-}"
 RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
 RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
@@ -83,7 +81,7 @@ though the downloaded ceremony binary is still signature-verified either way):
   bash contribute.sh
 
 Environment overrides:
-  CEREMONY_COORDINATOR_URL=...   Coordinator server URL (defaults to the round this script serves)
+  CEREMONY_COORDINATOR_URL=...   Coordinator server URL (required, the script asks for it if unset)
   CEREMONY_CONFIG_PATH=...       Use a local config file
   CEREMONY_CONFIG_URL=...        Download config from this URL
   CEREMONY_RELEASE_REPO=...      Default: sunnyside-io/privacy-boost-ceremony
