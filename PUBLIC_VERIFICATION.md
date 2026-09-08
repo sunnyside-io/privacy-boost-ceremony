@@ -47,13 +47,25 @@ curl -LO https://file.ceremony.privacyboost.io/prod-20260902-public.tar
 tar xf prod-20260902-public.tar
 ```
 
-### 2. Build the verification tool
+### 2. Check the manifest digest against the published round record
+
+```bash
+shasum -a 256 <BUNDLE_DIR>/manifest.json
+```
+
+Compare the output against the bundle manifest SHA256 published on that round's page, `rounds/2026-02.md` for the second round. A mismatch means the download is not the published bundle.
+
+This is the one check the bundle cannot perform on itself. Phase 1 recomputes every hash the bundle carries, but the bundle root covers every file except the manifest that carries it, so a fabricated bundle that is internally consistent would pass all of them. The round page is version controlled and does not come from the download host, which is what makes it an independent record.
+
+Run this before Phase 2 rather than after, because key re-derivation takes hours.
+
+### 3. Build the verification tool
 
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
 ```
 
-### 3. Run verification
+### 4. Run verification
 
 ```bash
 ./bin/ceremony verify-public --bundle-dir <BUNDLE_DIR>
