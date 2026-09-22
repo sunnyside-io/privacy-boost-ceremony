@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'ceremony/v*'
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -17,12 +16,13 @@ on:
         default: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     name: Validate Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
@@ -39,8 +39,7 @@ jobs:
             RAW_VERSION="${{ inputs.version }}"
             DRY_RUN="${{ inputs.dry_run }}"
           else
-            RAW_VERSION="${GITHUB_REF#refs/tags/}"
-            RAW_VERSION="${RAW_VERSION#ceremony/}"
+            RAW_VERSION="${GITHUB_REF#refs/tags/ceremony/}"
             DRY_RUN=false
           fi
 
@@ -50,7 +49,16 @@ jobs:
           fi
 
           VERSION="${RAW_VERSION#v}"
-          TAG="v${VERSION}"
+          if [[ ! "${VERSION}" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+            echo "Release version contains characters outside [0-9A-Za-z.+-]: ${VERSION}"
+            exit 1
+          fi
+
+          TAG="ceremony/v${VERSION}"
+          if [[ "${DRY_RUN}" == "false" && "${GITHUB_REF}" != "refs/tags/${TAG}" ]]; then
+            echo "Publishing requires ref refs/tags/${TAG} so the keyless signature is tag-bound."
+            exit 1
+          fi
 
           if [[ "${VERSION}" == *-* ]]; then
             PRERELEASE=true
@@ -58,15 +66,21 @@ jobs:
             PRERELEASE=false
           fi
 
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
-          echo "dry_run=${DRY_RUN}" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "prerelease=${PRERELEASE}"
+            echo "dry_run=${DRY_RUN}"
+          } >> "$GITHUB_OUTPUT"
 
   build-cli:
     name: CLI (${{ matrix.asset }})
     needs: validate
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -88,9 +102,11 @@ jobs:
             goarch: arm64
             asset: ceremony-darwin-arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
 
@@ -99,20 +115,28 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: |
-          mkdir -p release
-          BUILD_TAGS=""
-          if [[ "${{ matrix.goarch }}" == "amd64" ]]; then
-            BUILD_TAGS="-tags purego"
-          fi
-          go build -trimpath -buildvcs=false $BUILD_TAGS -o release/ceremony ./cmd/ceremony
-
-      - name: Smoke test binary
-        if: matrix.goos == runner.os || (matrix.goos == 'linux' && runner.os == 'Linux') || (matrix.goos == 'darwin' && runner.os == 'macOS')
         shell: bash
         run: |
-          ./release/ceremony > smoke.out 2>&1 || true
-          grep -q "ceremony CLI" smoke.out
+          set -euo pipefail
+          mkdir -p release
+          config_path="circuit-setup/configs/production.ceremony.config.json"
+          if command -v sha256sum >/dev/null 2>&1; then
+            config_sha="$(sha256sum "${config_path}" | awk '{print $1}')"
+          else
+            config_sha="$(shasum -a 256 "${config_path}" | awk '{print $1}')"
+          fi
+          pkg="github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/app"
+          build_tags=()
+          if [[ "${GOARCH}" == "amd64" ]]; then
+            build_tags=(-tags purego)
+          fi
+          go build -trimpath -buildvcs=false "${build_tags[@]}" \
+            -ldflags "-X ${pkg}.releaseVersion=${{ needs.validate.outputs.version }} -X ${pkg}.releaseConfigSHA256=${config_sha}" \
+            -o release/ceremony ./cmd/ceremony
+
+      - name: Smoke test binary identity
+        shell: bash
+        run: ./release/ceremony version --expect "${{ needs.validate.outputs.tag }}"
 
       - name: Package release artifact
         shell: bash
@@ -126,12 +150,41 @@ jobs:
             shasum -a 256 "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: v3.0.2
+
+      - name: Sign release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          cosign sign-blob --yes \
+            --bundle "${{ matrix.asset }}.tar.gz.cosign.bundle" \
+            "${{ matrix.asset }}.tar.gz"
+
+      - name: Verify release artifact signature
+        shell: bash
+        env:
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ceremony-release.yml@${{ github.ref }}
+          OIDC_ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          set -euo pipefail
+          cd release
+          cosign verify-blob \
+            --bundle "${{ matrix.asset }}.tar.gz.cosign.bundle" \
+            --certificate-identity "${CERT_IDENTITY}" \
+            --certificate-oidc-issuer "${OIDC_ISSUER}" \
+            "${{ matrix.asset }}.tar.gz"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.asset }}
           path: |
             release/${{ matrix.asset }}.tar.gz
             release/${{ matrix.asset }}.tar.gz.sha256
+            release/${{ matrix.asset }}.tar.gz.cosign.bundle
           retention-days: 3
 
   publish-release:
@@ -139,13 +192,72 @@ jobs:
     needs: [validate, build-cli]
     if: needs.validate.outputs.dry_run == 'false'
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: v3.0.2
+
+      - name: Sign ceremony config
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-config
+          cp circuit-setup/configs/production.ceremony.config.json release-config/production.ceremony.config.json
+          cosign sign-blob --yes \
+            --bundle release-config/production.ceremony.config.json.cosign.bundle \
+            release-config/production.ceremony.config.json
+
+      - name: Verify ceremony config signature
+        shell: bash
+        env:
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ceremony-release.yml@refs/tags/${{ needs.validate.outputs.tag }}
+          OIDC_ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle release-config/production.ceremony.config.json.cosign.bundle \
+            --certificate-identity "${CERT_IDENTITY}" \
+            --certificate-oidc-issuer "${OIDC_ISSUER}" \
+            release-config/production.ceremony.config.json
+
+      - name: Sign contribute script
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-contribute
+          cp circuit-setup/contribute.sh release-contribute/contribute.sh
+          cosign sign-blob --yes \
+            --bundle release-contribute/contribute.sh.cosign.bundle \
+            release-contribute/contribute.sh
+
+      - name: Verify contribute script signature
+        shell: bash
+        env:
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ceremony-release.yml@refs/tags/${{ needs.validate.outputs.tag }}
+          OIDC_ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle release-contribute/contribute.sh.cosign.bundle \
+            --certificate-identity "${CERT_IDENTITY}" \
+            --certificate-oidc-issuer "${OIDC_ISSUER}" \
+            release-contribute/contribute.sh
+
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           target_commitish: ${{ github.sha }}
@@ -156,18 +268,26 @@ jobs:
           files: |
             artifacts/ceremony-*/*.tar.gz
             artifacts/ceremony-*/*.tar.gz.sha256
+            artifacts/ceremony-*/*.tar.gz.cosign.bundle
+            release-config/production.ceremony.config.json
+            release-config/production.ceremony.config.json.cosign.bundle
+            release-contribute/contribute.sh
+            release-contribute/contribute.sh.cosign.bundle
 
   dry-run-summary:
     name: Dry Run Summary
     needs: [validate, build-cli]
     if: needs.validate.outputs.dry_run == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Summary
         run: |
-          echo "## Dry Run Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Tag: ${{ needs.validate.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Version: ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ceremony release artifacts built successfully. Run without dry_run to publish." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Dry Run Complete"
+            echo ""
+            echo "Tag: ${{ needs.validate.outputs.tag }}"
+            echo "Version: ${{ needs.validate.outputs.version }}"
+            echo ""
+            echo "Ceremony release artifacts built and verified successfully."
+          } >> "$GITHUB_STEP_SUMMARY"
