@@ -1,0 +1,227 @@
+{
+  "backendRelease": "ceremony/v0.0.5",
+  "backendCommit": "b19e261440c38af65498a3e1aed0fab6e2428282",
+  "rehearsalBundleRootSha256": "15546d058976150370faa53468239000a62daf5237360aee01ad98fca50446e6",
+  "circuits": [
+    {
+      "spec": {
+        "id": "s1",
+        "name": "s1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 2,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "c57b4e7f58935474edbbcc6c0d8ddb399d471b8a844de3421c386a6289cd45c5",
+      "derivedPhase1Power": 16
+    },
+    {
+      "spec": {
+        "id": "s5",
+        "name": "s5",
+        "type": "epoch",
+        "batchSize": 5,
+        "maxInputsPerTransfer": 2,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "02b2fe02acf06d39eb142ca863a534d22e6d05f57bbc786d7b9d3214ee91d9b1",
+      "derivedPhase1Power": 18
+    },
+    {
+      "spec": {
+        "id": "m1",
+        "name": "m1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "61bd356cf43af4f2a2a055c7c268d0c2d35afbc20deac3d8f19fbf09278ac48b",
+      "derivedPhase1Power": 17
+    },
+    {
+      "spec": {
+        "id": "m4",
+        "name": "m4",
+        "type": "epoch",
+        "batchSize": 4,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "1f7d6957e9d9fc27eebc5b23295c8131f45a13de0a5d30b56cc5824f9dbe8c29",
+      "derivedPhase1Power": 18
+    },
+    {
+      "spec": {
+        "id": "l1",
+        "name": "l1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "a2365cb4d2d031be166a4b72e5fa271187a798aa36d5a3b8c78e2c9d8f0cb7fa",
+      "derivedPhase1Power": 18
+    },
+    {
+      "spec": {
+        "id": "l3",
+        "name": "l3",
+        "type": "epoch",
+        "batchSize": 3,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "3dfdda6d51e877b83036c3bdf5cfe827a13d485fd577d68caa8dc142ac953459",
+      "derivedPhase1Power": 19
+    },
+    {
+      "spec": {
+        "id": "sp1",
+        "name": "sp1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 11,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "eda2f917189b5567fc5b4710a646a597ffce7869d40c90b43e0f5e9fdb6c4f01",
+      "derivedPhase1Power": 17
+    },
+    {
+      "spec": {
+        "id": "w51",
+        "name": "w51",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 51,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "9f16e79061b658b68a4522cb125b96ab498c292d138fb9674bc222a9b96e2035",
+      "derivedPhase1Power": 18
+    },
+    {
+      "spec": {
+        "id": "w201",
+        "name": "w201",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 201,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "maxFeeTokens": 4,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "cbb0444f3c8378336882dbc573d3d35e5b52d6168f56611c8f7c4d54b3334fdc",
+      "derivedPhase1Power": 19
+    },
+    {
+      "spec": {
+        "id": "f13",
+        "name": "f13",
+        "type": "forced",
+        "batchSize": 13,
+        "maxInputs": 13,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "5c393f84dcbe0c96f8df7dca4e2d34026d5418d3ecd5d9c118fdaf0d2893d2a6",
+      "derivedPhase1Power": 17
+    },
+    {
+      "spec": {
+        "id": "g1",
+        "name": "g1",
+        "type": "gift_claim",
+        "batchSize": 1,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "170e5a493c093a38126a5543dd331fb318e394285b46db6b7038159bc5bd218b",
+      "derivedPhase1Power": 16
+    },
+    {
+      "spec": {
+        "id": "g3",
+        "name": "g3",
+        "type": "gift_claim",
+        "batchSize": 3,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "phase1Power": 0,
+        "resourceRequirements": {}
+      },
+      "r1csSha256": "1e5bc0f48c419f23274213a56339a3b38d545e55616c6de7da44115cee4f8da6",
+      "derivedPhase1Power": 17
+    }
+  ]
+}

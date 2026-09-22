@@ -16,20 +16,22 @@ const productionConfigPath = "../../circuit-setup/configs/production.ceremony.co
 // ceremonyConfig mirrors the subset of the ceremony config this package consumes.
 // Field tags match circuit-setup/internal/model.CircuitSpec so the parse stays honest.
 type ceremonyConfig struct {
-	Circuits []struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		Type         string `json:"type"`
-		BatchSize    int    `json:"batchSize,omitempty"`
-		MaxInputs    int    `json:"maxInputs,omitempty"`
-		MaxInPerTx   int    `json:"maxInputsPerTransfer,omitempty"`
-		MaxOutPerTx  int    `json:"maxOutputsPerTransfer,omitempty"`
-		Depth        int    `json:"depth"`
-		AuthDepth    int    `json:"authDepth,omitempty"`
-		MaxTrees     int    `json:"maxTrees,omitempty"`
-		MaxAuthTrees int    `json:"maxAuthTrees,omitempty"`
-		MaxFeeTokens int    `json:"maxFeeTokens,omitempty"`
-	} `json:"circuits"`
+	Circuits []ceremonyCircuitSpec `json:"circuits"`
+}
+
+type ceremonyCircuitSpec struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	BatchSize    int    `json:"batchSize,omitempty"`
+	MaxInputs    int    `json:"maxInputs,omitempty"`
+	MaxInPerTx   int    `json:"maxInputsPerTransfer,omitempty"`
+	MaxOutPerTx  int    `json:"maxOutputsPerTransfer,omitempty"`
+	Depth        int    `json:"depth"`
+	AuthDepth    int    `json:"authDepth,omitempty"`
+	MaxTrees     int    `json:"maxTrees,omitempty"`
+	MaxAuthTrees int    `json:"maxAuthTrees,omitempty"`
+	MaxFeeTokens int    `json:"maxFeeTokens,omitempty"`
 }
 
 // TestNewCircuitCoversProductionConfig asserts every circuit in the production
@@ -37,50 +39,52 @@ type ceremonyConfig struct {
 // allocates its witness struct, so this exercises the full type dispatch without
 // paying any constraint-compilation cost.
 func TestNewCircuitCoversProductionConfig(t *testing.T) {
-	// Arrange - load the tracked production ceremony config.
-	raw, err := os.ReadFile(filepath.Clean(productionConfigPath))
-	if err != nil {
-		t.Fatalf("read production config: %v", err)
-	}
-	var cfg ceremonyConfig
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		t.Fatalf("parse production config: %v", err)
-	}
-	if len(cfg.Circuits) == 0 {
-		t.Fatal("production config declares no circuits")
-	}
+	seenTypes := make(map[string]int)
+	for _, configPath := range []string{productionConfigPath, "../../circuit-setup/configs/prod-ceremony-2026-02.config.json"} {
+		// Arrange - load the tracked production ceremony config.
+		raw, err := os.ReadFile(filepath.Clean(configPath))
+		if err != nil {
+			t.Fatalf("read production config: %v", err)
+		}
+		var cfg ceremonyConfig
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("parse production config: %v", err)
+		}
+		if len(cfg.Circuits) == 0 {
+			t.Fatal("production config declares no circuits")
+		}
 
-	seenTypes := make(map[string]int, len(cfg.Circuits))
-	for _, c := range cfg.Circuits {
-		t.Run(c.ID, func(t *testing.T) {
-			// Act - resolve the config entry through the production dispatch.
-			circuit, err := newCircuit(CircuitSpec{
-				ID:           c.ID,
-				Name:         c.Name,
-				Type:         CircuitType(c.Type),
-				BatchSize:    c.BatchSize,
-				MaxInputs:    c.MaxInputs,
-				MaxInPerTx:   c.MaxInPerTx,
-				MaxOutPerTx:  c.MaxOutPerTx,
-				Depth:        c.Depth,
-				AuthDepth:    c.AuthDepth,
-				MaxTrees:     c.MaxTrees,
-				MaxAuthTrees: c.MaxAuthTrees,
-				MaxFeeTokens: c.MaxFeeTokens,
+		for _, c := range cfg.Circuits {
+			t.Run(c.ID, func(t *testing.T) {
+				// Act - resolve the config entry through the production dispatch.
+				circuit, err := newCircuit(CircuitSpec{
+					ID:           c.ID,
+					Name:         c.Name,
+					Type:         CircuitType(c.Type),
+					BatchSize:    c.BatchSize,
+					MaxInputs:    c.MaxInputs,
+					MaxInPerTx:   c.MaxInPerTx,
+					MaxOutPerTx:  c.MaxOutPerTx,
+					Depth:        c.Depth,
+					AuthDepth:    c.AuthDepth,
+					MaxTrees:     c.MaxTrees,
+					MaxAuthTrees: c.MaxAuthTrees,
+					MaxFeeTokens: c.MaxFeeTokens,
+				})
+
+				// Assert - the type is dispatched and yields a circuit.
+				if err != nil {
+					t.Fatalf("newCircuit(%s, type=%s): %v", c.ID, c.Type, err)
+				}
+				if circuit == nil {
+					t.Fatalf("newCircuit(%s, type=%s) returned a nil circuit", c.ID, c.Type)
+				}
 			})
-
-			// Assert - the type is dispatched and yields a circuit.
-			if err != nil {
-				t.Fatalf("newCircuit(%s, type=%s): %v", c.ID, c.Type, err)
-			}
-			if circuit == nil {
-				t.Fatalf("newCircuit(%s, type=%s) returned a nil circuit", c.ID, c.Type)
-			}
-		})
-		seenTypes[c.Type]++
+			seenTypes[c.Type]++
+		}
 	}
 
-	// Assert - the config actually exercises every type this package dispatches,
+	// Assert - the current and archived configs exercise every type this package dispatches,
 	// so a silently unreachable arm cannot pass as covered.
 	for _, want := range []CircuitType{
 		CircuitTypeEpoch,
@@ -90,7 +94,7 @@ func TestNewCircuitCoversProductionConfig(t *testing.T) {
 		CircuitTypeGiftClaim,
 	} {
 		if seenTypes[string(want)] == 0 {
-			t.Errorf("production config exercises no %q circuit", want)
+			t.Errorf("current and archived configs exercise no %q circuit", want)
 		}
 	}
 }
