@@ -35,8 +35,8 @@ RUN_DIR="${CEREMONY_WORK_DIR:-$DEFAULT_RUN_DIR}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-}"
 RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
 # Keyless cosign trust anchor for verifying the release signature bundle. The
-# signer is pinned to this repo's ceremony-release workflow at a ceremony/v* tag,
-# independent of the GitHub Releases channel that also serves the tarball + .sha256.
+# signer must be an official backend or ceremony release workflow at the exact
+# ceremony/v* tag, independent of the channel serving the tarball and checksum.
 CEREMONY_OIDC_ISSUER="${CEREMONY_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CEREMONY_SIGNER_IDENTITY_REGEXP="${CEREMONY_SIGNER_IDENTITY_REGEXP:-}"
 # Pinned cosign build fetched when the contributor has none installed, so the
