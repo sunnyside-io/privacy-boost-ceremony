@@ -114,6 +114,13 @@ func startHeartbeat(v verbosity, label string, interval time.Duration) func() {
 	return func() { close(stop) }
 }
 
+// Official release binaries stamp both values with -ldflags. Local builds keep
+// the development defaults so they can use arbitrary ceremony configurations.
+var (
+	releaseVersion      = "dev"
+	releaseConfigSHA256 = ""
+)
+
 // RunCeremonyCLI dispatches ceremony CLI commands.
 func RunCeremonyCLI(args []string) error {
 	// Top-level command is required so we can route to a subcommand handler.
@@ -128,6 +135,8 @@ func RunCeremonyCLI(args []string) error {
 		return runContribute(args[1:])
 	case "verify-public":
 		return runVerifyPublic(args[1:])
+	case "version":
+		return runVersion(args[1:])
 	default:
 		usage()
 		return fmt.Errorf("unknown command %s", args[0])
@@ -137,6 +146,61 @@ func RunCeremonyCLI(args []string) error {
 // usage prints the ceremony CLI help text listing all commands and flags.
 func usage() {
 	fmt.Print(ceremonyUsageText)
+}
+
+// runVersion prints the release identity and optionally asserts an expected tag.
+func runVersion(args []string) error {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	expect := fs.String("expect", "", "fail unless the binary matches this release tag")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	sha := releaseConfigSHA256
+	if sha == "" {
+		sha = "(unstamped dev build)"
+	}
+	fmt.Printf("ceremony CLI\nversion: %s\npinnedConfigSha256: %s\n", releaseVersion, sha)
+	if *expect == "" {
+		return nil
+	}
+	return verifyReleaseVersionPin(*expect)
+}
+
+// verifyReleaseConfigPin prevents a signed release binary from using config
+// bytes other than the config published and signed with that release.
+func verifyReleaseConfigPin(configPath string) error {
+	if releaseConfigSHA256 == "" {
+		return nil
+	}
+	actual, err := sha256FileHex(configPath)
+	if err != nil {
+		return fmt.Errorf("hash config for release pin: %w", err)
+	}
+	if !strings.EqualFold(actual, releaseConfigSHA256) {
+		return fmt.Errorf(
+			"config does not match this ceremony release (version %s): got config sha256 %s, expected %s. Fetch the config published with this release or use a matching ceremony binary",
+			releaseVersion, actual, releaseConfigSHA256,
+		)
+	}
+	return nil
+}
+
+// verifyReleaseVersionPin accepts the full release tag and its two shorthand forms.
+func verifyReleaseVersionPin(expectedTag string) error {
+	expectedVersion := strings.TrimPrefix(strings.TrimPrefix(expectedTag, "ceremony/"), "v")
+	if expectedVersion != releaseVersion {
+		return fmt.Errorf(
+			"binary version does not match expected release %s: this binary reports version %s",
+			expectedTag, releaseVersion,
+		)
+	}
+	return nil
+}
+
+func sha256FileHex(path string) (string, error) {
+	digest, _, err := describeLocalArtifact(path)
+	return digest, err
 }
 
 // runVerifyPublic validates a public export bundle offline from local files.
