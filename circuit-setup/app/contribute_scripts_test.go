@@ -111,3 +111,42 @@ func TestResolveSignerIdentitySupportsOfficialTransition(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeReleaseTagRejectsRegexpSyntax(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash scripts are not supported on Windows")
+	}
+	repoRoot := filepath.Join("..", "..")
+	for _, scriptPath := range []string{
+		filepath.Join(repoRoot, "circuit-setup", "contribute.sh"),
+		filepath.Join(repoRoot, "circuit-setup", "contribute_quickstart.sh"),
+	} {
+		t.Run(filepath.Base(scriptPath), func(t *testing.T) {
+			fn := extractShellFunction(t, scriptPath, "normalize_release_tag")
+			run := func(version string) ([]byte, error) {
+				t.Helper()
+				return exec.Command("bash", "-c", fn+"\n"+`normalize_release_tag "$1"`, "test", version).CombinedOutput()
+			}
+
+			for input, want := range map[string]string{
+				"1.2.3":            "ceremony/v1.2.3\n",
+				"v1.2.3-rc.1":      "ceremony/v1.2.3-rc.1\n",
+				"ceremony/v1+meta": "ceremony/v1+meta\n",
+			} {
+				got, err := run(input)
+				if err != nil {
+					t.Fatalf("normalize valid version %q: %v\n%s", input, err, got)
+				}
+				if string(got) != want {
+					t.Fatalf("normalize %q: got %q, want %q", input, got, want)
+				}
+			}
+
+			for _, input := range []string{"1.2.3\\E.*", "1.2.3/other", "ceremony/v"} {
+				if got, err := run(input); err == nil {
+					t.Fatalf("unsafe release version %q succeeded with %q", input, got)
+				}
+			}
+		})
+	}
+}

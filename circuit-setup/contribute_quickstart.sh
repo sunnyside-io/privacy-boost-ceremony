@@ -356,18 +356,23 @@ release_requested_explicitly() {
 
 normalize_release_tag() {
   local version="$1"
+  local release_tag release_version
   if [[ -z "${version}" ]]; then
     return 1
   fi
   if [[ "${version}" == ceremony/v* ]]; then
-    printf '%s\n' "${version}"
-    return 0
+    release_tag="${version}"
+  elif [[ "${version}" == v* ]]; then
+    release_tag="ceremony/${version}"
+  else
+    release_tag="ceremony/v${version}"
   fi
-  if [[ "${version}" == v* ]]; then
-    printf 'ceremony/%s\n' "${version}"
-    return 0
+  release_version="${release_tag#ceremony/v}"
+  if [[ ! "${release_version}" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+    printf '[ceremony] error: invalid release version: %s\n' "${version}" >&2
+    return 1
   fi
-  printf 'ceremony/v%s\n' "${version}"
+  printf '%s\n' "${release_tag}"
 }
 
 ensure_release_download_deps() {
