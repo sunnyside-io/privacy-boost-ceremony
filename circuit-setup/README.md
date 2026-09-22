@@ -23,7 +23,8 @@ For more details, see `circuit-setup/contributor-guide.md`.
 
 ```bash
 # Contribute to the ceremony
-ceremony contribute --coordinator-url <url> [--state-dir <dir>] [--quiet]
+ceremony contribute --config <path> --coordinator-url <url>
+  [--state-dir <dir>] [--quiet] [--no-browser]
 
 # Verify a published ceremony bundle offline
 ceremony verify-public --bundle-dir <dir> [--quiet]
