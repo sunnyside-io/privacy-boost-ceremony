@@ -1,15 +1,14 @@
 {
-  "id": "prod-ceremony-2026-03",
-  "title": "Privacy Boost Production Ceremony (third round)",
-  "description": "Production public ceremony re-keying the signature-verifying shapes after the gnark v0.16.3 circuit upgrade",
+  "id": "prod-ceremony-2026-02",
+  "title": "Privacy Boost Production Ceremony (second round)",
+  "description": "Production public ceremony with finalized deposit+epoch+forced circuit matrix",
   "accessMode": "public",
   "production": true,
-  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-03",
+  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-02",
   "server": {
     "listenAddr": "127.0.0.1:8787",
     "sessionTtlMinutes": 60,
-    "contributionLeaseTtlMinutes": 20,
-    "setupMaxWorkers": 12
+    "contributionLeaseTtlMinutes": 20
   },
   "githubAuth": {
     "enabled": true,
@@ -57,6 +56,32 @@
       "maxAuthTrees": 16
     },
     {
+      "id": "s12",
+      "name": "s12",
+      "type": "epoch",
+      "batchSize": 12,
+      "maxInputsPerTransfer": 2,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
+      "id": "s25",
+      "name": "s25",
+      "type": "epoch",
+      "batchSize": 25,
+      "maxInputsPerTransfer": 2,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
       "id": "m1",
       "name": "m1",
       "type": "epoch",
@@ -83,6 +108,19 @@
       "maxAuthTrees": 16
     },
     {
+      "id": "m8",
+      "name": "m8",
+      "type": "epoch",
+      "batchSize": 8,
+      "maxInputsPerTransfer": 4,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
       "id": "l1",
       "name": "l1",
       "type": "epoch",
@@ -100,6 +138,19 @@
       "name": "l3",
       "type": "epoch",
       "batchSize": 3,
+      "maxInputsPerTransfer": 15,
+      "maxOutputsPerTransfer": 2,
+      "depth": 24,
+      "authDepth": 20,
+      "maxFeeTokens": 4,
+      "maxTrees": 16,
+      "maxAuthTrees": 16
+    },
+    {
+      "id": "l6",
+      "name": "l6",
+      "type": "epoch",
+      "batchSize": 6,
       "maxInputsPerTransfer": 15,
       "maxOutputsPerTransfer": 2,
       "depth": 24,
@@ -146,6 +197,46 @@
       "maxFeeTokens": 4,
       "maxTrees": 16,
       "maxAuthTrees": 16
+    },
+    {
+      "id": "d1",
+      "name": "d1",
+      "type": "deposit",
+      "batchSize": 1,
+      "depth": 24,
+      "maxTrees": 16
+    },
+    {
+      "id": "d4",
+      "name": "d4",
+      "type": "deposit",
+      "batchSize": 4,
+      "depth": 24,
+      "maxTrees": 16
+    },
+    {
+      "id": "d14",
+      "name": "d14",
+      "type": "deposit",
+      "batchSize": 14,
+      "depth": 24,
+      "maxTrees": 16
+    },
+    {
+      "id": "p1",
+      "name": "p1",
+      "type": "portal",
+      "batchSize": 1,
+      "depth": 24,
+      "maxTrees": 16
+    },
+    {
+      "id": "p6",
+      "name": "p6",
+      "type": "portal",
+      "batchSize": 6,
+      "depth": 24,
+      "maxTrees": 16
     },
     {
       "id": "f13",

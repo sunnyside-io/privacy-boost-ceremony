@@ -217,7 +217,7 @@ The `transcriptHash` is the value to keep. It is the fingerprint of your specifi
 At the end of a run, `contribute` also writes every accepted contribution to a JSON receipt so the record survives the terminal closing. The path is printed on the last line:
 
 ```text
-[ceremony][contribute] receipt_written path=/.../.state/prod-ceremony-2026-02/receipts/prod-ceremony-2026-02-20260827T093000Z.json
+[ceremony][contribute] receipt_written path=/.../.state/prod-ceremony-2026-03/receipts/prod-ceremony-2026-03-20260827T093000Z.json
 ```
 
 The default location is a `receipts/` directory inside the `stateDir` from your config, named for the round and the completion time, so each run adds a file rather than overwriting the last one. Pass `--receipt /path/to/file.json` to choose the location yourself.
