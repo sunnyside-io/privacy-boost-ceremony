@@ -28,7 +28,9 @@ First round, `prod-ceremony-2026-01`, 18 circuits:
 
 ### Verify
 
-Download and extract the public bundle, then run:
+The current source targets round 3 and matches the backend `ceremony/v0.0.5` circuit sources and compiler (gnark v0.16.3, gnark-crypto v0.21.0, Go 1.25.13). Use the release or source revision recorded for an earlier round when verifying its bundle. Circuit compilation differs between rounds, so the current source cannot reconstruct earlier rounds' keys.
+
+For a round-3 bundle, build the current source and run:
 
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony

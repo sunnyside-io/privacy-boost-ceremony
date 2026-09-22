@@ -18,12 +18,17 @@ cosign verify-blob \
   --bundle contribute.sh.cosign.bundle \
   --certificate-identity "https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  contribute.sh || \
+cosign verify-blob \
+  --bundle contribute.sh.cosign.bundle \
+  --certificate-identity "https://github.com/sunnyside-io/privacy-boost-ceremony/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   contribute.sh
 
 bash contribute.sh --coordinator-url <COORDINATOR_URL> --release-version <tag>
 ```
 
-The `--certificate-identity` above names a different repository from the download URLs on purpose. Releases are built and signed by the backend workflow, then republished to the public ceremony repository, so the identity must stay on the signing repository even though the assets are fetched from the public one. Changing it to match the download host makes verification fail.
+Existing releases were signed by the backend workflow, while new public releases are signed by the ceremony workflow. The two commands accept either official workflow for the exact requested tag during that transition. The contributor script applies the same policy automatically.
 
 Quick start without script verification (fetches `contribute.sh` from the mutable `main` branch, though the ceremony binary it downloads is still signature-verified either way):
 
@@ -162,6 +167,11 @@ cosign verify-blob \
   --bundle ceremony-linux-amd64.tar.gz.cosign.bundle \
   --certificate-identity 'https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ceremony-linux-amd64.tar.gz || \
+cosign verify-blob \
+  --bundle ceremony-linux-amd64.tar.gz.cosign.bundle \
+  --certificate-identity 'https://github.com/sunnyside-io/privacy-boost-ceremony/.github/workflows/ceremony-release.yml@refs/tags/<tag>' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ceremony-linux-amd64.tar.gz
 ```
 
@@ -172,12 +182,17 @@ cosign verify-blob \
   --bundle production.ceremony.config.json.cosign.bundle \
   --certificate-identity 'https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  production.ceremony.config.json || \
+cosign verify-blob \
+  --bundle production.ceremony.config.json.cosign.bundle \
+  --certificate-identity 'https://github.com/sunnyside-io/privacy-boost-ceremony/.github/workflows/ceremony-release.yml@refs/tags/<tag>' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   production.ceremony.config.json
 ```
 
 The bootstrap script (`contribute.sh`) is published and signed the same way. See the pinned-and-verified flow in "Quickstart (Recommended)" above for the exact commands.
 
-If a ceremony is published from a different repository, set `CEREMONY_RELEASE_REPO` to match its release workflow before running the script. To verify against a pattern instead of one exact tag (for example, a fork with its own tagging scheme), set `CEREMONY_SIGNER_IDENTITY_REGEXP` and pass `--certificate-identity-regexp` instead of `--certificate-identity` above.
+If a ceremony is published from a different repository, set both `CEREMONY_RELEASE_REPO` and `CEREMONY_SIGNER_REPO` before running the script. To verify against a pattern instead of one exact tag, set `CEREMONY_SIGNER_IDENTITY_REGEXP` and pass `--certificate-identity-regexp` instead of `--certificate-identity` above.
 
 ### The binary is pinned to one config
 

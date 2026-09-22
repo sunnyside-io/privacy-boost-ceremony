@@ -47,7 +47,9 @@ type CompileResult struct {
 	RequiredPhase1Power int
 }
 
-const compileCacheVersion = 1
+// compileCacheVersion invalidates same-shape cached R1CS artifacts. Bump it for
+// every frontend constraint change, even when CircuitSpec dimensions stay fixed.
+const compileCacheVersion = 12
 
 type compileCacheMetadata struct {
 	CacheVersion        int    `json:"cacheVersion"`

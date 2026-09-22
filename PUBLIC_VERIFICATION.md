@@ -61,6 +61,8 @@ Run this before Phase 2 rather than after, because key re-derivation takes hours
 
 ### 3. Build the verification tool
 
+Select the source revision or release recorded for the bundle's round before building. The current source uses gnark v0.16.3 and the round-3 circuits from backend `ceremony/v0.0.5`. It cannot reconstruct the first two rounds' circuit systems. The second-round download above needs its recorded round-2 source or binary.
+
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
 ```

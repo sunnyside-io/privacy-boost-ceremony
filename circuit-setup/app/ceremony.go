@@ -17,48 +17,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/config"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/phase2"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/publicbundle"
 )
 
-// circuit defines the minimal info the contributor client needs per circuit.
-type circuit struct {
-	ID   string
-	Type string
-}
-
-// circuits is the fixed production circuit list.
-var circuits = []circuit{
-	{ID: "s1", Type: "epoch"},
-	{ID: "s4", Type: "epoch"},
-	{ID: "s8", Type: "epoch"},
-	{ID: "s16", Type: "epoch"},
-	{ID: "s32", Type: "epoch"},
-	{ID: "s64", Type: "epoch"},
-	{ID: "s100", Type: "epoch"},
-	{ID: "m1", Type: "epoch"},
-	{ID: "m4", Type: "epoch"},
-	{ID: "m8", Type: "epoch"},
-	{ID: "l1", Type: "epoch"},
-	{ID: "l4", Type: "epoch"},
-	{ID: "l8", Type: "epoch"},
-	{ID: "sp1", Type: "epoch"},
-	{ID: "d1", Type: "deposit"},
-	{ID: "d8", Type: "deposit"},
-	{ID: "d32", Type: "deposit"},
-	{ID: "f8", Type: "forced"},
-}
-
-const defaultStateDir = "./ceremony-state"
-
 const ceremonyUsageText = `ceremony CLI
 
 Commands:
-  contribute --coordinator-url <url> [--state-dir <dir>] [--quiet]
+  contribute --config <path> --coordinator-url <url>
+    [--state-dir <dir>] [--quiet] [--no-browser]
   verify-public --bundle-dir <dir> [--quiet]
     [--require-anchor] [--rpc-url https://rpc.example]
     [--anchor-chain-id 1] [--anchor-tx-hash 0x...] [--min-confirmations 12]
+  version [--expect ceremony/vX.Y.Z]
 `
 
 type verbosity struct {
@@ -114,6 +87,13 @@ func startHeartbeat(v verbosity, label string, interval time.Duration) func() {
 	return func() { close(stop) }
 }
 
+// Official release binaries stamp both values with -ldflags. Local builds keep
+// the development defaults so they can use arbitrary ceremony configurations.
+var (
+	releaseVersion      = "dev"
+	releaseConfigSHA256 = ""
+)
+
 // RunCeremonyCLI dispatches ceremony CLI commands.
 func RunCeremonyCLI(args []string) error {
 	// Top-level command is required so we can route to a subcommand handler.
@@ -128,6 +108,8 @@ func RunCeremonyCLI(args []string) error {
 		return runContribute(args[1:])
 	case "verify-public":
 		return runVerifyPublic(args[1:])
+	case "version":
+		return runVersion(args[1:])
 	default:
 		usage()
 		return fmt.Errorf("unknown command %s", args[0])
@@ -137,6 +119,61 @@ func RunCeremonyCLI(args []string) error {
 // usage prints the ceremony CLI help text listing all commands and flags.
 func usage() {
 	fmt.Print(ceremonyUsageText)
+}
+
+// runVersion prints the release identity and optionally asserts an expected tag.
+func runVersion(args []string) error {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	expect := fs.String("expect", "", "fail unless the binary matches this release tag")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	sha := releaseConfigSHA256
+	if sha == "" {
+		sha = "(unstamped dev build)"
+	}
+	fmt.Printf("ceremony CLI\nversion: %s\npinnedConfigSha256: %s\n", releaseVersion, sha)
+	if *expect == "" {
+		return nil
+	}
+	return verifyReleaseVersionPin(*expect)
+}
+
+// verifyReleaseConfigPin prevents a signed release binary from using config
+// bytes other than the config published and signed with that release.
+func verifyReleaseConfigPin(configPath string) error {
+	if releaseConfigSHA256 == "" {
+		return nil
+	}
+	actual, err := sha256FileHex(configPath)
+	if err != nil {
+		return fmt.Errorf("hash config for release pin: %w", err)
+	}
+	if !strings.EqualFold(actual, releaseConfigSHA256) {
+		return fmt.Errorf(
+			"config does not match this ceremony release (version %s): got config sha256 %s, expected %s. Fetch the config published with this release or use a matching ceremony binary",
+			releaseVersion, actual, releaseConfigSHA256,
+		)
+	}
+	return nil
+}
+
+// verifyReleaseVersionPin accepts the full release tag and its two shorthand forms.
+func verifyReleaseVersionPin(expectedTag string) error {
+	expectedVersion := strings.TrimPrefix(strings.TrimPrefix(expectedTag, "ceremony/"), "v")
+	if expectedVersion != releaseVersion {
+		return fmt.Errorf(
+			"binary version does not match expected release %s: this binary reports version %s",
+			expectedTag, releaseVersion,
+		)
+	}
+	return nil
+}
+
+func sha256FileHex(path string) (string, error) {
+	digest, _, err := describeLocalArtifact(path)
+	return digest, err
 }
 
 // runVerifyPublic validates a public export bundle offline from local files.
@@ -239,34 +276,75 @@ func loadVerifyConfigFromBundle(bundleDir string) (*model.CeremonyConfig, error)
 	return &cfg, nil
 }
 
+type contributeOptions struct {
+	cfg            *model.CeremonyConfig
+	coordinatorURL string
+	quiet          bool
+	noBrowser      bool
+}
+
+func parseContributeOptions(args []string) (*contributeOptions, error) {
+	fs := flag.NewFlagSet("contribute", flag.ContinueOnError)
+	configPath := fs.String("config", "", "ceremony config json (required)")
+	coordinatorURL := fs.String("coordinator-url", "", "coordinator API URL (required)")
+	stateDir := fs.String("state-dir", "", "override the config's local state directory")
+	quiet := fs.Bool("quiet", false, "suppress non-essential output")
+	noBrowser := fs.Bool("no-browser", false, "do not attempt to open the GitHub device-flow URL in a browser")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if *configPath == "" {
+		return nil, fmt.Errorf("--config required")
+	}
+	if *coordinatorURL == "" {
+		return nil, fmt.Errorf("--coordinator-url required")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyReleaseConfigPin(*configPath); err != nil {
+		return nil, err
+	}
+	if *stateDir != "" {
+		cfg.StateDir, err = filepath.Abs(*stateDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve state directory: %w", err)
+		}
+	}
+
+	return &contributeOptions{
+		cfg:            cfg,
+		coordinatorURL: *coordinatorURL,
+		quiet:          *quiet,
+		noBrowser:      *noBrowser,
+	}, nil
+}
+
 // runContribute executes contributor-local flow: auth, claim, download, compute, submit.
 func runContribute(args []string) error {
-	fs := flag.NewFlagSet("contribute", flag.ContinueOnError)
-	coordinatorURL := fs.String("coordinator-url", "", "coordinator API URL (required)")
-	stateDir := fs.String("state-dir", defaultStateDir, "local directory for temporary artifacts")
-	quiet := fs.Bool("quiet", false, "suppress non-essential output")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	v := verbosity{quiet: *quiet}
-	if *coordinatorURL == "" {
-		return fmt.Errorf("--coordinator-url required")
-	}
-	if err := os.MkdirAll(*stateDir, 0o755); err != nil {
-		return fmt.Errorf("create state directory: %w", err)
-	}
-	absStateDir, err := filepath.Abs(*stateDir)
+	opts, err := parseContributeOptions(args)
 	if err != nil {
 		return err
 	}
+	v := verbosity{quiet: opts.quiet}
+	if opts.noBrowser {
+		v.Printf("[ceremony][contribute] browser_open_disabled=true\n")
+	}
+	if err := os.MkdirAll(opts.cfg.StateDir, 0o755); err != nil {
+		return fmt.Errorf("create state directory: %w", err)
+	}
+	absStateDir := opts.cfg.StateDir
 
-	fmt.Printf("\n  Contributing to %d circuits.\n\n", len(circuits))
+	fmt.Printf("\n  Contributing to %d circuits.\n\n", len(opts.cfg.Circuits))
 
 	startAll := time.Now()
-	totalCircuits := len(circuits)
+	totalCircuits := len(opts.cfg.Circuits)
 
 	// Authenticate once, then reuse the same session token across all circuit contributions.
-	sessionToken, participantID, err := runAuthFlow(v, *coordinatorURL)
+	openLogin := !opts.noBrowser && strings.TrimSpace(os.Getenv("NO_BROWSER")) == ""
+	sessionToken, participantID, err := runAuthFlow(v, opts.coordinatorURL, openLogin)
 	if err != nil {
 		return err
 	}
@@ -278,7 +356,7 @@ func runContribute(args []string) error {
 	skipped := 0
 	contributed := 0
 	// Each circuit uses its own lease and input/output artifact pair.
-	for i, c := range circuits {
+	for i, c := range opts.cfg.Circuits {
 		circuitID := c.ID
 		circuitIndex := i + 1
 		v.Printf(
@@ -294,7 +372,7 @@ func runContribute(args []string) error {
 			circuitIndex,
 			totalCircuits,
 		)
-		claim, err := claimContribution(v, *coordinatorURL, sessionToken, circuitID, time.Hour)
+		claim, err := claimContribution(v, opts.coordinatorURL, sessionToken, circuitID, time.Hour)
 		if err != nil {
 			return err
 		}
@@ -342,7 +420,7 @@ func runContribute(args []string) error {
 			claim.LeaseID,
 		)
 		if err := downloadInputArtifact(
-			*coordinatorURL,
+			opts.coordinatorURL,
 			claim.InputDownloadPath,
 			sessionToken,
 			inputPath,
@@ -398,7 +476,7 @@ func runContribute(args []string) error {
 			CreatedAt string `json:"createdAt"`
 		}
 		if err := submitOutputArtifact(
-			*coordinatorURL,
+			opts.coordinatorURL,
 			sessionToken,
 			circuitID,
 			claim.LeaseID,
@@ -490,7 +568,7 @@ func runContribute(args []string) error {
 		if err := writeContributionReceipt(
 			receiptPath,
 			participantID,
-			*coordinatorURL,
+			opts.coordinatorURL,
 			absStateDir,
 			results,
 		); err != nil {
@@ -647,7 +725,7 @@ func describeLocalArtifact(path string) (string, int64, error) {
 }
 
 // runAuthFlow completes GitHub Device Flow and returns session token + participant ID.
-func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
+func runAuthFlow(v verbosity, coordinatorURL string, openLogin bool) (string, string, error) {
 	// Start Device Flow and print instructions for browser-based approval.
 	var start struct {
 		DeviceCode      string `json:"device_code"`
@@ -678,6 +756,10 @@ func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
 	fmt.Println("  │" + pad("  Waiting for approval...") + "│")
 	fmt.Println("  └" + strings.Repeat("─", boxW) + "┘")
 	fmt.Println("")
+	if openLogin {
+		// The printed URL remains the fallback when no launcher is available.
+		_ = openBrowser(start.VerificationURI)
+	}
 
 	// Coordinator polls GitHub and returns coordinator-issued session identity.
 	v.Printf("[ceremony][auth] waiting_for_github_approval\n")
