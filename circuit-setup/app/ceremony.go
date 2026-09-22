@@ -17,48 +17,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/config"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/phase2"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/publicbundle"
 )
 
-// circuit defines the minimal info the contributor client needs per circuit.
-type circuit struct {
-	ID   string
-	Type string
-}
-
-// circuits is the fixed production circuit list.
-var circuits = []circuit{
-	{ID: "s1", Type: "epoch"},
-	{ID: "s4", Type: "epoch"},
-	{ID: "s8", Type: "epoch"},
-	{ID: "s16", Type: "epoch"},
-	{ID: "s32", Type: "epoch"},
-	{ID: "s64", Type: "epoch"},
-	{ID: "s100", Type: "epoch"},
-	{ID: "m1", Type: "epoch"},
-	{ID: "m4", Type: "epoch"},
-	{ID: "m8", Type: "epoch"},
-	{ID: "l1", Type: "epoch"},
-	{ID: "l4", Type: "epoch"},
-	{ID: "l8", Type: "epoch"},
-	{ID: "sp1", Type: "epoch"},
-	{ID: "d1", Type: "deposit"},
-	{ID: "d8", Type: "deposit"},
-	{ID: "d32", Type: "deposit"},
-	{ID: "f8", Type: "forced"},
-}
-
-const defaultStateDir = "./ceremony-state"
-
 const ceremonyUsageText = `ceremony CLI
 
 Commands:
-  contribute --coordinator-url <url> [--state-dir <dir>] [--quiet]
+  contribute --config <path> --coordinator-url <url>
+    [--state-dir <dir>] [--quiet] [--no-browser]
   verify-public --bundle-dir <dir> [--quiet]
     [--require-anchor] [--rpc-url https://rpc.example]
     [--anchor-chain-id 1] [--anchor-tx-hash 0x...] [--min-confirmations 12]
+  version [--expect ceremony/vX.Y.Z]
 `
 
 type verbosity struct {
@@ -303,34 +276,74 @@ func loadVerifyConfigFromBundle(bundleDir string) (*model.CeremonyConfig, error)
 	return &cfg, nil
 }
 
+type contributeOptions struct {
+	cfg            *model.CeremonyConfig
+	coordinatorURL string
+	quiet          bool
+	noBrowser      bool
+}
+
+func parseContributeOptions(args []string) (*contributeOptions, error) {
+	fs := flag.NewFlagSet("contribute", flag.ContinueOnError)
+	configPath := fs.String("config", "", "ceremony config json (required)")
+	coordinatorURL := fs.String("coordinator-url", "", "coordinator API URL (required)")
+	stateDir := fs.String("state-dir", "", "override the config's local state directory")
+	quiet := fs.Bool("quiet", false, "suppress non-essential output")
+	noBrowser := fs.Bool("no-browser", false, "do not attempt to open the GitHub device-flow URL in a browser")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if *configPath == "" {
+		return nil, fmt.Errorf("--config required")
+	}
+	if *coordinatorURL == "" {
+		return nil, fmt.Errorf("--coordinator-url required")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyReleaseConfigPin(*configPath); err != nil {
+		return nil, err
+	}
+	if *stateDir != "" {
+		cfg.StateDir, err = filepath.Abs(*stateDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve state directory: %w", err)
+		}
+	}
+
+	return &contributeOptions{
+		cfg:            cfg,
+		coordinatorURL: *coordinatorURL,
+		quiet:          *quiet,
+		noBrowser:      *noBrowser,
+	}, nil
+}
+
 // runContribute executes contributor-local flow: auth, claim, download, compute, submit.
 func runContribute(args []string) error {
-	fs := flag.NewFlagSet("contribute", flag.ContinueOnError)
-	coordinatorURL := fs.String("coordinator-url", "", "coordinator API URL (required)")
-	stateDir := fs.String("state-dir", defaultStateDir, "local directory for temporary artifacts")
-	quiet := fs.Bool("quiet", false, "suppress non-essential output")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	v := verbosity{quiet: *quiet}
-	if *coordinatorURL == "" {
-		return fmt.Errorf("--coordinator-url required")
-	}
-	if err := os.MkdirAll(*stateDir, 0o755); err != nil {
-		return fmt.Errorf("create state directory: %w", err)
-	}
-	absStateDir, err := filepath.Abs(*stateDir)
+	opts, err := parseContributeOptions(args)
 	if err != nil {
 		return err
 	}
+	v := verbosity{quiet: opts.quiet}
+	if opts.noBrowser {
+		v.Printf("[ceremony][contribute] browser_open_disabled=true\n")
+	}
+	if err := os.MkdirAll(opts.cfg.StateDir, 0o755); err != nil {
+		return fmt.Errorf("create state directory: %w", err)
+	}
+	absStateDir := opts.cfg.StateDir
 
-	fmt.Printf("\n  Contributing to %d circuits.\n\n", len(circuits))
+	fmt.Printf("\n  Contributing to %d circuits.\n\n", len(opts.cfg.Circuits))
 
 	startAll := time.Now()
-	totalCircuits := len(circuits)
+	totalCircuits := len(opts.cfg.Circuits)
 
 	// Authenticate once, then reuse the same session token across all circuit contributions.
-	sessionToken, participantID, err := runAuthFlow(v, *coordinatorURL)
+	sessionToken, participantID, err := runAuthFlow(v, opts.coordinatorURL)
 	if err != nil {
 		return err
 	}
@@ -342,7 +355,7 @@ func runContribute(args []string) error {
 	skipped := 0
 	contributed := 0
 	// Each circuit uses its own lease and input/output artifact pair.
-	for i, c := range circuits {
+	for i, c := range opts.cfg.Circuits {
 		circuitID := c.ID
 		circuitIndex := i + 1
 		v.Printf(
@@ -358,7 +371,7 @@ func runContribute(args []string) error {
 			circuitIndex,
 			totalCircuits,
 		)
-		claim, err := claimContribution(v, *coordinatorURL, sessionToken, circuitID, time.Hour)
+		claim, err := claimContribution(v, opts.coordinatorURL, sessionToken, circuitID, time.Hour)
 		if err != nil {
 			return err
 		}
@@ -406,7 +419,7 @@ func runContribute(args []string) error {
 			claim.LeaseID,
 		)
 		if err := downloadInputArtifact(
-			*coordinatorURL,
+			opts.coordinatorURL,
 			claim.InputDownloadPath,
 			sessionToken,
 			inputPath,
@@ -462,7 +475,7 @@ func runContribute(args []string) error {
 			CreatedAt string `json:"createdAt"`
 		}
 		if err := submitOutputArtifact(
-			*coordinatorURL,
+			opts.coordinatorURL,
 			sessionToken,
 			circuitID,
 			claim.LeaseID,
@@ -554,7 +567,7 @@ func runContribute(args []string) error {
 		if err := writeContributionReceipt(
 			receiptPath,
 			participantID,
-			*coordinatorURL,
+			opts.coordinatorURL,
 			absStateDir,
 			results,
 		); err != nil {

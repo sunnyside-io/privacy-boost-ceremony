@@ -8,7 +8,59 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
 )
+
+func TestParseContributeOptionsUsesConfigCircuitsAndCompatibilityFlags(t *testing.T) {
+	configStateDir := filepath.Join(t.TempDir(), "config-state")
+	configPath := filepath.Join(t.TempDir(), "ceremony.config.json")
+	writeJSONFile(t, configPath, model.CeremonyConfig{
+		ID:         "config-selected-circuits",
+		AccessMode: model.AccessPublic,
+		StateDir:   configStateDir,
+		Phase1: model.Phase1Spec{
+			SourceURL: "https://example.com/phase1-{power}.ptau",
+			ExpectedSHA256ByPower: map[string]string{
+				"1": "phase1-sha",
+			},
+		},
+		GitHubAuth: model.GitHubAuthSpec{Enabled: true, ClientID: "client-id"},
+		Circuits: []model.CircuitSpec{
+			{ID: "custom-a", Name: "custom-a", Type: model.CircuitTypeEpoch, Depth: 4},
+			{ID: "custom-b", Name: "custom-b", Type: model.CircuitTypeForced, Depth: 4},
+		},
+	})
+
+	originalPin := releaseConfigSHA256
+	releaseConfigSHA256 = ""
+	t.Cleanup(func() { releaseConfigSHA256 = originalPin })
+
+	overrideStateDir := filepath.Join(t.TempDir(), "override-state")
+	opts, err := parseContributeOptions([]string{
+		"--config", configPath,
+		"--coordinator-url", "https://coordinator.example",
+		"--state-dir", overrideStateDir,
+		"--quiet",
+		"--no-browser",
+	})
+	if err != nil {
+		t.Fatalf("parseContributeOptions returned error: %v", err)
+	}
+
+	if opts.coordinatorURL != "https://coordinator.example" {
+		t.Fatalf("expected coordinator URL from flags, got %q", opts.coordinatorURL)
+	}
+	if !opts.quiet || !opts.noBrowser {
+		t.Fatalf("expected compatibility flags to be preserved, got quiet=%t noBrowser=%t", opts.quiet, opts.noBrowser)
+	}
+	if opts.cfg.StateDir != overrideStateDir {
+		t.Fatalf("expected state override %q, got %q", overrideStateDir, opts.cfg.StateDir)
+	}
+	if len(opts.cfg.Circuits) != 2 || opts.cfg.Circuits[0].ID != "custom-a" || opts.cfg.Circuits[1].ID != "custom-b" {
+		t.Fatalf("expected circuits from the supplied config, got %+v", opts.cfg.Circuits)
+	}
+}
 
 func TestDownloadInputArtifactSendsQueryAndHeaderAuth(t *testing.T) {
 	const token = "session-token-123"

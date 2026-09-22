@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,11 @@ func TestRunCeremonyCLIVersionExpect(t *testing.T) {
 	}
 	if err := RunCeremonyCLI([]string{"version", "--expect", "ceremony/v9.9.9"}); err == nil {
 		t.Fatal("mismatched --expect should fail")
+	}
+
+	for _, want := range []string{"\n  version ", "--expect ceremony/vX.Y.Z", "--config <path>", "--no-browser"} {
+		if !strings.Contains(ceremonyUsageText, want) {
+			t.Fatalf("usage does not list %q: %s", want, ceremonyUsageText)
+		}
 	}
 }
