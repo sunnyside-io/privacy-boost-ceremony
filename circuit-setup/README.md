@@ -14,7 +14,7 @@ bash contribute.sh
 The script presents an interactive menu to choose how to obtain the ceremony binary:
 
 1. **Download pre-built release** — fastest, downloads a verified binary from GitHub Releases.
-2. **Build from source (local Go)** — clones the repo at the release tag and builds with your Go toolchain (requires Go 1.25.13+).
+2. **Build from source (local Go)**. Clones the repo at the release tag and builds with your Go toolchain (requires Go 1.25.13+).
 3. **Build from source (Docker)** — clones the repo and builds + runs inside a Docker container. No local toolchain needed.
 
 For more details, see `circuit-setup/contributor-guide.md`.

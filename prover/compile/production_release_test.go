@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -30,6 +31,21 @@ func TestRound3CompilationMatchesRelease(t *testing.T) {
 	}
 	if len(fixture.Circuits) != 12 {
 		t.Fatalf("expected 12 production shapes, got %d", len(fixture.Circuits))
+	}
+	configRaw, err := os.ReadFile(filepath.Clean(productionConfigPath))
+	if err != nil {
+		t.Fatalf("read production config: %v", err)
+	}
+	var production ceremonyConfig
+	if err := json.Unmarshal(configRaw, &production); err != nil {
+		t.Fatalf("parse production config: %v", err)
+	}
+	fixtureSpecs := make([]ceremonyCircuitSpec, 0, len(fixture.Circuits))
+	for _, expected := range fixture.Circuits {
+		fixtureSpecs = append(fixtureSpecs, expected.Spec)
+	}
+	if !reflect.DeepEqual(fixtureSpecs, production.Circuits) {
+		t.Fatal("round-3 compilation fixture does not match the production config")
 	}
 	for _, expected := range fixture.Circuits {
 		t.Run(expected.Spec.ID, func(t *testing.T) {
