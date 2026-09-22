@@ -19,11 +19,10 @@ NO_BROWSER_OPT="${CEREMONY_NO_BROWSER:-}"
 CEREMONY_BIN="${CEREMONY_BINARY_PATH:-}"
 BUILD_MODE="${CEREMONY_BUILD_MODE:-auto}"
 CEREMONY_RELEASE_REPO="${CEREMONY_RELEASE_REPO:-sunnyside-io/privacy-boost-ceremony}"
-# The signer is a separate identity from the asset host. Releases are built and
-# signed by the backend workflow, then republished to the public ceremony repo,
-# so a caller that points --release-repo at the public repo must not have the
-# cosign identity follow it, or verification checks the wrong signer.
-CEREMONY_SIGNER_REPO="${CEREMONY_SIGNER_REPO:-sunnyside-io/privacy-boost-backend}"
+# Existing releases were signed by the backend workflow, while future releases
+# are signed by this public repository. An empty value accepts either official
+# workflow for the exact requested tag during that transition.
+CEREMONY_SIGNER_REPO="${CEREMONY_SIGNER_REPO:-}"
 CEREMONY_RELEASE_VERSION="${CEREMONY_RELEASE_VERSION:-}"
 CEREMONY_OIDC_ISSUER="${CEREMONY_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CEREMONY_SIGNER_IDENTITY_REGEXP="${CEREMONY_SIGNER_IDENTITY_REGEXP:-}"
@@ -53,7 +52,7 @@ Environment overrides:
   CEREMONY_BINARY_PATH=...       (use an existing ceremony binary and skip build)
   CEREMONY_RELEASE_VERSION=...   (download ceremony/v<version> before building)
   CEREMONY_RELEASE_REPO=...      (default: sunnyside-io/privacy-boost-ceremony)
-  CEREMONY_SIGNER_REPO=...       (default: sunnyside-io/privacy-boost-backend; whose workflow signed the release)
+  CEREMONY_SIGNER_REPO=...       (require one exact signer repo instead of the official transition pair)
   CEREMONY_BUILD_MODE=auto       (auto, local, or docker; default: auto)
   CEREMONY_GO_VERSION=...        (default: derived from this repo's go.mod; used for local Go fallback / Docker image tag)
   CEREMONY_DOCKER_IMAGE=...      (default: golang:${CEREMONY_GO_VERSION}-bookworm)
@@ -455,18 +454,20 @@ verify_release_checksum() {
   return 0
 }
 
-# Resolve the cosign identity flag/value pair used to verify release artifacts.
-# Defaults to an exact match on the resolved release tag so a signature from a
-# different ceremony release cannot verify. CEREMONY_SIGNER_IDENTITY_REGEXP
-# overrides to pattern matching for callers that need it (e.g. a fork).
+# Resolve the cosign identity used to verify release artifacts. The default
+# transition policy accepts only the two official workflows and binds both to
+# the exact release tag. A signer-repo override restores one exact identity.
 resolve_signer_identity() {
   local release_tag="$1"
   if [[ -n "${CEREMONY_SIGNER_IDENTITY_REGEXP:-}" ]]; then
     SIGNER_IDENTITY_FLAG="--certificate-identity-regexp"
     SIGNER_IDENTITY_VALUE="${CEREMONY_SIGNER_IDENTITY_REGEXP}"
-  else
+  elif [[ -n "${CEREMONY_SIGNER_REPO}" ]]; then
     SIGNER_IDENTITY_FLAG="--certificate-identity"
     SIGNER_IDENTITY_VALUE="https://github.com/${CEREMONY_SIGNER_REPO}/.github/workflows/ceremony-release.yml@refs/tags/${release_tag}"
+  else
+    SIGNER_IDENTITY_FLAG="--certificate-identity-regexp"
+    SIGNER_IDENTITY_VALUE="^https://github\\.com/sunnyside-io/privacy-boost-(backend|ceremony)/\\.github/workflows/ceremony-release\\.yml@refs/tags/\\Q${release_tag}\\E$"
   fi
 }
 

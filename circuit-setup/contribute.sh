@@ -9,10 +9,10 @@ set -euo pipefail
 # client with the current config-based backend flow.
 
 DEFAULT_RELEASE_REPO="sunnyside-io/privacy-boost-ceremony"
-# The signer is a separate identity from the asset host. Releases are built and
-# signed by the backend workflow, then republished to the public ceremony repo,
-# so deriving the identity from RELEASE_REPO would check the wrong signer.
-DEFAULT_SIGNER_REPO="sunnyside-io/privacy-boost-backend"
+# Existing releases were signed by the backend workflow, while future releases
+# are signed by this public repository. An empty default accepts either official
+# workflow for the exact requested tag during that transition.
+DEFAULT_SIGNER_REPO=""
 DEFAULT_SOURCE_REF="main"
 DEFAULT_CONFIG_RELPATH="circuit-setup/configs/production.ceremony.config.json"
 # The config asset name published on every release. Round-independent on
@@ -63,16 +63,19 @@ COSIGN_DIR=""
 usage() {
   cat <<'EOF'
 Usage:
-  bash contribute.sh [--coordinator-url http://host] [--config path.json] [--config-url https://...] [--build-mode auto|release|local|docker] [--release-version X.Y.Z] [--source-ref git-ref] [--work-dir path] [--allow-insecure-http] [--skip-signature-verification] [--quiet] [--no-browser]
+  bash contribute.sh [--coordinator-url http://host] [--config path.json] [--config-url https://...] [--build-mode auto|release|local|docker] [--release-version X.Y.Z] [--release-repo owner/repo] [--signer-repo owner/repo] [--source-ref git-ref] [--work-dir path] [--allow-insecure-http] [--skip-signature-verification] [--quiet] [--no-browser]
 
 Recommended public flow (pins to a signed release tag instead of the mutable main branch):
   1) Find the latest tag at https://github.com/sunnyside-io/privacy-boost-ceremony/releases
   2) curl -fsSLO https://github.com/sunnyside-io/privacy-boost-ceremony/releases/download/<tag>/contribute.sh
      curl -fsSLO https://github.com/sunnyside-io/privacy-boost-ceremony/releases/download/<tag>/contribute.sh.cosign.bundle
-  3) cosign verify-blob --bundle contribute.sh.cosign.bundle \
-       --certificate-identity "https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
-       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-       contribute.sh
+   3) Verify the exact tag against either official signing workflow during the transition:
+      cosign verify-blob --bundle contribute.sh.cosign.bundle \
+        --certificate-identity "https://github.com/sunnyside-io/privacy-boost-backend/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com contribute.sh || \
+      cosign verify-blob --bundle contribute.sh.cosign.bundle \
+        --certificate-identity "https://github.com/sunnyside-io/privacy-boost-ceremony/.github/workflows/ceremony-release.yml@refs/tags/<tag>" \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com contribute.sh
   4) bash contribute.sh --release-version <tag>
 
 Quick start without script verification (fetches contribute.sh itself from the mutable main branch,
@@ -85,7 +88,7 @@ Environment overrides:
   CEREMONY_CONFIG_PATH=...       Use a local config file
   CEREMONY_CONFIG_URL=...        Download config from this URL
   CEREMONY_RELEASE_REPO=...      Default: sunnyside-io/privacy-boost-ceremony
-  CEREMONY_SIGNER_REPO=...       Default: sunnyside-io/privacy-boost-backend
+  CEREMONY_SIGNER_REPO=...       Require one exact signer repo instead of the official transition pair
   CEREMONY_SOURCE_REF=...        Default: main
   CEREMONY_BUILD_MODE=...        auto, release, local, or docker
   CEREMONY_RELEASE_VERSION=...   GitHub release tag or version
@@ -134,6 +137,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release-repo)
       RELEASE_REPO="$2"
+      shift 2
+      ;;
+    --signer-repo)
+      SIGNER_REPO="$2"
       shift 2
       ;;
     --source-ref)
@@ -454,18 +461,20 @@ file_sha256() {
   return 1
 }
 
-# Resolve the cosign identity flag/value pair used to verify release artifacts.
-# Defaults to an exact match on the resolved release tag so a signature from a
-# different ceremony release cannot verify. CEREMONY_SIGNER_IDENTITY_REGEXP
-# overrides to pattern matching for callers that need it (e.g. a fork).
+# Resolve the cosign identity used to verify release artifacts. The default
+# transition policy accepts only the two official workflows and binds both to
+# the exact release tag. A signer-repo override restores one exact identity.
 resolve_signer_identity() {
   local release_tag="$1"
   if [[ -n "${CEREMONY_SIGNER_IDENTITY_REGEXP:-}" ]]; then
     SIGNER_IDENTITY_FLAG="--certificate-identity-regexp"
     SIGNER_IDENTITY_VALUE="${CEREMONY_SIGNER_IDENTITY_REGEXP}"
-  else
+  elif [[ -n "${SIGNER_REPO}" ]]; then
     SIGNER_IDENTITY_FLAG="--certificate-identity"
     SIGNER_IDENTITY_VALUE="https://github.com/${SIGNER_REPO}/.github/workflows/ceremony-release.yml@refs/tags/${release_tag}"
+  else
+    SIGNER_IDENTITY_FLAG="--certificate-identity-regexp"
+    SIGNER_IDENTITY_VALUE="^https://github\\.com/sunnyside-io/privacy-boost-(backend|ceremony)/\\.github/workflows/ceremony-release\\.yml@refs/tags/\\Q${release_tag}\\E$"
   fi
 }
 
