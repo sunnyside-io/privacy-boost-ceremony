@@ -343,7 +343,8 @@ func runContribute(args []string) error {
 	totalCircuits := len(opts.cfg.Circuits)
 
 	// Authenticate once, then reuse the same session token across all circuit contributions.
-	sessionToken, participantID, err := runAuthFlow(v, opts.coordinatorURL)
+	openLogin := !opts.noBrowser && strings.TrimSpace(os.Getenv("NO_BROWSER")) == ""
+	sessionToken, participantID, err := runAuthFlow(v, opts.coordinatorURL, openLogin)
 	if err != nil {
 		return err
 	}
@@ -724,7 +725,7 @@ func describeLocalArtifact(path string) (string, int64, error) {
 }
 
 // runAuthFlow completes GitHub Device Flow and returns session token + participant ID.
-func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
+func runAuthFlow(v verbosity, coordinatorURL string, openLogin bool) (string, string, error) {
 	// Start Device Flow and print instructions for browser-based approval.
 	var start struct {
 		DeviceCode      string `json:"device_code"`
@@ -755,6 +756,10 @@ func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
 	fmt.Println("  │" + pad("  Waiting for approval...") + "│")
 	fmt.Println("  └" + strings.Repeat("─", boxW) + "┘")
 	fmt.Println("")
+	if openLogin {
+		// The printed URL remains the fallback when no launcher is available.
+		_ = openBrowser(start.VerificationURI)
+	}
 
 	// Coordinator polls GitHub and returns coordinator-issued session identity.
 	v.Printf("[ceremony][auth] waiting_for_github_approval\n")
