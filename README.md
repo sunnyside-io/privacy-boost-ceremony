@@ -6,15 +6,15 @@ The ceremony uses Groth16 multi-party computation (MPC) via [gnark](https://gith
 
 ## Status
 
-There have been two completed production ceremony rounds, and a third is in preparation. Each one is recorded under [`rounds/`](rounds/), with its circuit shapes, release tags, config file and config checksum.
+Three production ceremony rounds have finalized. Each one is recorded under [`rounds/`](rounds/), with its circuit shapes, release tags, config file and config checksum.
 
 - [First round, `prod-ceremony-2026-01`](rounds/2026-01.md). Complete.
-- [Second round, `prod-ceremony-2026-02`](rounds/2026-02.md). Complete. This is the round the current production keys come from.
-- [Third round, `prod-ceremony-2026-03`](rounds/2026-03.md). In preparation.
+- [Second round, `prod-ceremony-2026-02`](rounds/2026-02.md). Complete. Its deposit and portal keys are retained in the planned round-three upgrade.
+- [Third round, `prod-ceremony-2026-03`](rounds/2026-03.md). Finalized on 2026-09-23, covering 12 circuits and 192 contributions. The round record pins the final bundle digests and describes the planned deployment scope.
 
 `main` always carries the current round's config. Past rounds stay reachable through their own record above and through the release tag they ran under.
 
-**The first two rounds are complete.** Each round's public bundle and derived keys are available for download.
+**Downloads for the first two rounds** are listed below. Round three is finalized, but its public download URL is not recorded here yet. Finalization does not establish deployment on any network.
 
 Second round, `prod-ceremony-2026-02`, 21 circuits and 490 contributions:
 
