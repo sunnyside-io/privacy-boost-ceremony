@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // productionConfigPath points at the tracked config the production ceremony runs.
@@ -20,6 +21,7 @@ type ceremonyConfig struct {
 }
 
 type ceremonyCircuitSpec struct {
+	AssetFormat  string `json:"assetFormat,omitempty"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	Type         string `json:"type"`
@@ -40,7 +42,7 @@ type ceremonyCircuitSpec struct {
 // paying any constraint-compilation cost.
 func TestNewCircuitCoversProductionConfig(t *testing.T) {
 	seenTypes := make(map[string]int)
-	for _, configPath := range []string{productionConfigPath, "../../circuit-setup/configs/prod-ceremony-2026-02.config.json"} {
+	for _, configPath := range []string{productionConfigPath, "../../circuit-setup/configs/prod-ceremony-2026-02.config.json", "../../circuit-setup/configs/production.ceremony.2026-04.config.json"} {
 		// Arrange - load the tracked production ceremony config.
 		raw, err := os.ReadFile(filepath.Clean(configPath))
 		if err != nil {
@@ -58,6 +60,7 @@ func TestNewCircuitCoversProductionConfig(t *testing.T) {
 			t.Run(c.ID, func(t *testing.T) {
 				// Act - resolve the config entry through the production dispatch.
 				circuit, err := newCircuit(CircuitSpec{
+					AssetFormat:  c.AssetFormat,
 					ID:           c.ID,
 					Name:         c.Name,
 					Type:         CircuitType(c.Type),
@@ -92,6 +95,7 @@ func TestNewCircuitCoversProductionConfig(t *testing.T) {
 		CircuitTypeForced,
 		CircuitTypePortal,
 		CircuitTypeGiftClaim,
+		CircuitTypeNoteMigration,
 	} {
 		if seenTypes[string(want)] == 0 {
 			t.Errorf("current and archived configs exercise no %q circuit", want)
@@ -115,4 +119,20 @@ func TestNewCircuitRejectsUnknownType(t *testing.T) {
 	if circuit != nil {
 		t.Fatalf("expected a nil circuit for an unknown type, got %T", circuit)
 	}
+}
+
+func setSentinelModTime(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+
+	// A stable old timestamp makes both cache reuse and rewrite observable
+	// without waiting for the filesystem's timestamp resolution.
+	sentinel := time.Unix(1, 0).UTC()
+	if err := os.Chtimes(path, sentinel, sentinel); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info
 }

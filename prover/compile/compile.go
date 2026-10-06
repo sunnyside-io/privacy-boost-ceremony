@@ -18,14 +18,19 @@ import (
 type CircuitType string
 
 const (
-	CircuitTypeEpoch     CircuitType = "epoch"
-	CircuitTypeDeposit   CircuitType = "deposit"
-	CircuitTypeForced    CircuitType = "forced"
-	CircuitTypePortal    CircuitType = "portal"
-	CircuitTypeGiftClaim CircuitType = "gift_claim"
+	CircuitTypeEpoch         CircuitType = "epoch"
+	CircuitTypeDeposit       CircuitType = "deposit"
+	CircuitTypeForced        CircuitType = "forced"
+	CircuitTypePortal        CircuitType = "portal"
+	CircuitTypeGiftClaim     CircuitType = "gift_claim"
+	CircuitTypeNoteMigration CircuitType = "note_migration"
 )
 
+const AddressAssetFormat = "erc20-address-v1"
+
 type CircuitSpec struct {
+	// Empty uses the current protocol format. No historical relation is compiled.
+	AssetFormat  string
 	ID           string
 	Name         string
 	Type         CircuitType
@@ -49,7 +54,7 @@ type CompileResult struct {
 
 // compileCacheVersion invalidates same-shape cached R1CS artifacts. Bump it for
 // every frontend constraint change, even when CircuitSpec dimensions stay fixed.
-const compileCacheVersion = 12
+const compileCacheVersion = 21
 
 type compileCacheMetadata struct {
 	CacheVersion        int    `json:"cacheVersion"`
@@ -64,7 +69,11 @@ func CompileWithMetadata(spec CircuitSpec, outDir string) (*CompileResult, error
 		return nil, err
 	}
 
-	out := filepath.Join(outDir, fmt.Sprintf("%s.r1cs", spec.ID))
+	artifactID := spec.ID
+	if spec.AssetFormat != "" {
+		artifactID += "." + spec.AssetFormat
+	}
+	out := filepath.Join(outDir, fmt.Sprintf("%s.r1cs", artifactID))
 	metaPath := out + ".meta.json"
 	specHash, err := compileSpecHash(spec)
 	if err != nil {
@@ -153,13 +162,18 @@ func writeCompileMetadata(path string, meta compileCacheMetadata) error {
 }
 
 func newCircuit(spec CircuitSpec) (frontend.Circuit, error) {
+	if spec.AssetFormat != "" && spec.AssetFormat != AddressAssetFormat {
+		return nil, fmt.Errorf("unsupported asset format: %s", spec.AssetFormat)
+	}
 	switch spec.Type {
+	case CircuitTypeNoteMigration:
+		return appcircuits.NewNoteMigrationCircuit(spec.BatchSize, spec.Depth, spec.MaxTrees), nil
 	case CircuitTypeEpoch:
-		maxFee := spec.MaxFeeTokens
-		if maxFee == 0 {
-			maxFee = spec.BatchSize
+		fees := spec.MaxFeeTokens
+		if fees == 0 {
+			fees = spec.BatchSize
 		}
-		return appcircuits.NewEpochCircuit(spec.BatchSize, spec.MaxInPerTx, spec.MaxOutPerTx, spec.Depth, spec.AuthDepth, maxFee, spec.MaxTrees, spec.MaxAuthTrees), nil
+		return appcircuits.NewEpochCircuit(spec.BatchSize, spec.MaxInPerTx, spec.MaxOutPerTx, spec.Depth, spec.AuthDepth, fees, spec.MaxTrees, spec.MaxAuthTrees), nil
 	case CircuitTypeDeposit:
 		return appcircuits.NewDepositEpochCircuit(spec.BatchSize, spec.Depth, spec.MaxTrees), nil
 	case CircuitTypeForced:

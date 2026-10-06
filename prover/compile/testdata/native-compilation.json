@@ -1,0 +1,345 @@
+{
+  "backendCircuitSource": "98ab1507c20d31324550c87489154ca4cb3da370",
+  "go": "1.25.13",
+  "gnark": "v0.16.3",
+  "gnarkCrypto": "v0.21.0",
+  "circuits": [
+    {
+      "spec": {
+        "id": "s1",
+        "name": "s1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 2,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "761c04b4dd8899caef559488c17f725305ef95e8da7a4fc7e549e20eb6a693c1",
+      "derivedPhase1Power": 16,
+      "constraints": 64987,
+      "publicInputs": 52
+    },
+    {
+      "spec": {
+        "id": "s5",
+        "name": "s5",
+        "type": "epoch",
+        "batchSize": 5,
+        "maxInputsPerTransfer": 2,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "756f45948b61d6d1b35970bbdcc56cca25301a2c4e5ade8cad7177cd0b8300d6",
+      "derivedPhase1Power": 18,
+      "constraints": 223332,
+      "publicInputs": 76
+    },
+    {
+      "spec": {
+        "id": "m1",
+        "name": "m1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "c8b69a8b96f42e28286cee48737443c83cb14155396a63bfaf6a2d43d7931949",
+      "derivedPhase1Power": 17,
+      "constraints": 82511,
+      "publicInputs": 54
+    },
+    {
+      "spec": {
+        "id": "m4",
+        "name": "m4",
+        "type": "epoch",
+        "batchSize": 4,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "2926d370d23af624e7f6c9a53dbc137a9c4d1ce218d1f6d57e422d56d5c1395b",
+      "derivedPhase1Power": 18,
+      "constraints": 253778,
+      "publicInputs": 78
+    },
+    {
+      "spec": {
+        "id": "l1",
+        "name": "l1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "5f79c7c6dd6b41623de0b4f4b330553694d6224e6c3cc921fc6131057ce2b8cc",
+      "derivedPhase1Power": 18,
+      "constraints": 178911,
+      "publicInputs": 65
+    },
+    {
+      "spec": {
+        "id": "l3",
+        "name": "l3",
+        "type": "epoch",
+        "batchSize": 3,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 2,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "4fc3dda2cde98e76db7f7ab60caa381fe0121556a6f3a45769286ef84a510865",
+      "derivedPhase1Power": 19,
+      "constraints": 486064,
+      "publicInputs": 103
+    },
+    {
+      "spec": {
+        "id": "sp1",
+        "name": "sp1",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 4,
+        "maxOutputsPerTransfer": 11,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "14f4745d16e0c713555ead7247b64b081f0163124861e759b145946d0d510234",
+      "derivedPhase1Power": 17,
+      "constraints": 96286,
+      "publicInputs": 63
+    },
+    {
+      "spec": {
+        "id": "w51",
+        "name": "w51",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 51,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "9fc6340b57bb2ec80d7dea2e502fde545edb34362364cf38a86ba9c608d2c7cf",
+      "derivedPhase1Power": 18,
+      "constraints": 254845,
+      "publicInputs": 114
+    },
+    {
+      "spec": {
+        "id": "w201",
+        "name": "w201",
+        "type": "epoch",
+        "batchSize": 1,
+        "maxInputsPerTransfer": 15,
+        "maxOutputsPerTransfer": 201,
+        "depth": 24,
+        "authDepth": 20,
+        "maxFeeTokens": 4,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "896c1b9c056f0aa9ed56bf8caed00eb0676eadebbfcb78ffdf518be4c0b110ae",
+      "derivedPhase1Power": 19,
+      "constraints": 489089,
+      "publicInputs": 264
+    },
+    {
+      "spec": {
+        "id": "d1",
+        "name": "d1",
+        "type": "deposit",
+        "batchSize": 1,
+        "depth": 24,
+        "maxTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "ae35e66c006d48ac98d3ddf9dc0da8a6cea5b818fa2b1272a479af458e405dae",
+      "derivedPhase1Power": 15,
+      "constraints": 23655,
+      "publicInputs": 30
+    },
+    {
+      "spec": {
+        "id": "d4",
+        "name": "d4",
+        "type": "deposit",
+        "batchSize": 4,
+        "depth": 24,
+        "maxTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "a72323e9f5bb838bc6890007818b0212b931c5fc102b7eaa269693b6621eb4a1",
+      "derivedPhase1Power": 16,
+      "constraints": 32856,
+      "publicInputs": 42
+    },
+    {
+      "spec": {
+        "id": "d14",
+        "name": "d14",
+        "type": "deposit",
+        "batchSize": 14,
+        "depth": 24,
+        "maxTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "a42e79096c8565a27321c3553e780a79af6a11d395c33975b6289c93ac780804",
+      "derivedPhase1Power": 17,
+      "constraints": 67374,
+      "publicInputs": 82
+    },
+    {
+      "spec": {
+        "id": "p1",
+        "name": "p1",
+        "type": "portal",
+        "batchSize": 1,
+        "depth": 24,
+        "maxTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "3bf20d557893b8f4a035053f372c51e1266dcdc90dfafd9108467be3c45e339c",
+      "derivedPhase1Power": 15,
+      "constraints": 23386,
+      "publicInputs": 31
+    },
+    {
+      "spec": {
+        "id": "p6",
+        "name": "p6",
+        "type": "portal",
+        "batchSize": 6,
+        "depth": 24,
+        "maxTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "672f355212927082662f8c2b40927f9f8db9f035e16f31bf2293d7f33d3eb306",
+      "derivedPhase1Power": 16,
+      "constraints": 38035,
+      "publicInputs": 61
+    },
+    {
+      "spec": {
+        "id": "f13",
+        "name": "f13",
+        "type": "forced",
+        "batchSize": 1,
+        "maxInputs": 13,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "c107bcba577b441b1c73b276feab64bd36619b76e736db66606edb9c363551e0",
+      "derivedPhase1Power": 17,
+      "constraints": 124484,
+      "publicInputs": 53
+    },
+    {
+      "spec": {
+        "id": "g1",
+        "name": "g1",
+        "type": "gift_claim",
+        "batchSize": 1,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "2bb054401c496040c43965d09096b6887c775b77b739c99e62a6cb801c3a5a2d",
+      "derivedPhase1Power": 16,
+      "constraints": 48967,
+      "publicInputs": 50
+    },
+    {
+      "spec": {
+        "id": "g3",
+        "name": "g3",
+        "type": "gift_claim",
+        "batchSize": 3,
+        "depth": 24,
+        "authDepth": 20,
+        "maxTrees": 16,
+        "maxAuthTrees": 16,
+        "assetFormat": "erc20-address-v1"
+      },
+      "r1csSha256": "31c5b9277f8ebc8e53863853d57640c602067400405e51c04159320a2644215f",
+      "derivedPhase1Power": 17,
+      "constraints": 119870,
+      "publicInputs": 64
+    },
+    {
+      "spec": {
+        "id": "note-migration-v1-3",
+        "name": "note-migration-v1-3",
+        "type": "note_migration",
+        "assetFormat": "erc20-address-v1",
+        "batchSize": 3,
+        "depth": 24,
+        "maxTrees": 16
+      },
+      "r1csSha256": "9a47b064fe551e828cccfc4c8d2075d4c09b13b4ea25bea3a7990e8babe7ee78",
+      "derivedPhase1Power": 16,
+      "constraints": 64029,
+      "publicInputs": 31
+    },
+    {
+      "spec": {
+        "id": "note-migration-v1-16",
+        "name": "note-migration-v1-16",
+        "type": "note_migration",
+        "assetFormat": "erc20-address-v1",
+        "batchSize": 16,
+        "depth": 24,
+        "maxTrees": 16
+      },
+      "r1csSha256": "2aede8777e497a0b804bdc09172430a01d0763e589ae8c9e028407af732af4d9",
+      "derivedPhase1Power": 18,
+      "constraints": 253387,
+      "publicInputs": 57
+    }
+  ]
+}

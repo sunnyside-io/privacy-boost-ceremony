@@ -13,15 +13,16 @@ const (
 	CeremonyStateFinalized   CeremonyState = "finalized"
 )
 
-// CircuitType identifies the kind of circuit (epoch, deposit, forced, portal, gift_claim).
+// CircuitType identifies the circuit family, including native note migration.
 type CircuitType string
 
 const (
-	CircuitTypeEpoch     CircuitType = "epoch"
-	CircuitTypeDeposit   CircuitType = "deposit"
-	CircuitTypeForced    CircuitType = "forced"
-	CircuitTypePortal    CircuitType = "portal"
-	CircuitTypeGiftClaim CircuitType = "gift_claim"
+	CircuitTypeEpoch           CircuitType = "epoch"
+	CircuitTypeDeposit         CircuitType = "deposit"
+	CircuitTypeForced          CircuitType = "forced"
+	CircuitTypePortal          CircuitType = "portal"
+	CircuitTypeGiftClaim       CircuitType = "gift_claim"
+	CircuitTypeNoteMigrationV1 CircuitType = "note_migration"
 )
 
 // AccessMode controls ceremony visibility (private allowlist vs public).
@@ -34,6 +35,7 @@ const (
 
 // CircuitSpec defines compile-time parameters for a single circuit.
 type CircuitSpec struct {
+	AssetFormat  string      `json:"assetFormat,omitempty"`
 	ID           string      `json:"id"`
 	Name         string      `json:"name"`
 	Type         CircuitType `json:"type"`

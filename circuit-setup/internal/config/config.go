@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
+	"github.com/testinprod-io/privacy-boost-protocol/pkg/addressprotocol"
 )
 
 // Load reads a JSON config file, parses it, validates, and applies defaults.
@@ -104,12 +105,10 @@ func Validate(cfg *model.CeremonyConfig) error {
 		return fmt.Errorf("phase1.expectedSha256ByPower is required")
 	}
 
-	// GitHub auth must be enabled; client ID required.
+	// Authentication is a ceremony property. Offline verification and remote
+	// contributors do not need the coordinator OAuth client identifier.
 	if !cfg.GitHubAuth.Enabled {
 		return fmt.Errorf("githubAuth.enabled must be true")
-	}
-	if cfg.GitHubAuth.ClientID == "" {
-		return fmt.Errorf("githubAuth.clientId is required")
 	}
 
 	// Access mode and allowlist consistency.
@@ -121,7 +120,23 @@ func Validate(cfg *model.CeremonyConfig) error {
 	}
 
 	// Per-circuit validation.
+	seen := make(map[string]bool)
 	for _, c := range cfg.Circuits {
+		if seen[c.ID] {
+			return fmt.Errorf("duplicate circuit id %q", c.ID)
+		}
+		seen[c.ID] = true
+		if c.AssetFormat != "" && c.AssetFormat != addressprotocol.AssetFormat {
+			return fmt.Errorf("circuit %s has unsupported asset format", c.ID)
+		}
+		if c.Type == model.CircuitTypeNoteMigrationV1 && c.AssetFormat != addressprotocol.AssetFormat {
+			return fmt.Errorf("circuit %s NoteMigration requires address asset format", c.ID)
+		}
+		if c.AssetFormat == addressprotocol.AssetFormat {
+			if _, err := c.AddressShape(); err != nil {
+				return fmt.Errorf("circuit %s: %w", c.ID, err)
+			}
+		}
 		if c.ID == "" || c.Name == "" {
 			return fmt.Errorf("each circuit needs id and name")
 		}
