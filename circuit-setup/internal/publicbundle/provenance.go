@@ -19,12 +19,14 @@ const defaultMinAnchorConfirmations = 12
 // All anchor-specific fields are caller-supplied at verify time so ceremony
 // config/finalize flows remain independent from post-ceremony anchoring.
 type VerifyOptions struct {
-	RequireAnchor    bool
-	RPCURL           string
-	AnchorChainID    string
-	AnchorTxHash     string
-	MinConfirmations int
-	Logf             func(format string, args ...any)
+	// Cache reuse is diagnostic only. Full verification recompiles from source.
+	ReuseCompileCache bool
+	RequireAnchor     bool
+	RPCURL            string
+	AnchorChainID     string
+	AnchorTxHash      string
+	MinConfirmations  int
+	Logf              func(format string, args ...any)
 }
 
 func logf(opts VerifyOptions, format string, args ...any) {

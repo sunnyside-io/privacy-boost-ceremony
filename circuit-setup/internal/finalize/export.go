@@ -11,28 +11,21 @@ import (
 )
 
 // ExportKeysFromPhase2 verifies contribution chain and writes resulting pk/vk files.
+// cache may be nil, in which case phase1Path is parsed and sealed inline as before;
+// passing a shared *Phase1Cache lets multiple circuits resolved to the same Phase1
+// power reuse one parse within a run.
 func ExportKeysFromPhase2(
 	phase1Path,
 	r1csPath string,
 	contributionPhase2Paths []string,
 	pkOutPath,
 	vkOutPath string,
+	cache *Phase1Cache,
 ) error {
-	// Load phase1 artifact and seal commons.
-	phase1File, err := os.Open(phase1Path)
+	commons, err := resolveCommons(cache, phase1Path)
 	if err != nil {
 		return err
 	}
-	defer phase1File.Close()
-
-	// Declare local variables used in this stage.
-	var ph1 mpcsetup.Phase1
-	if _, err := ph1.ReadFrom(phase1File); err != nil {
-		return err
-	}
-
-	// Compute values for the next processing step.
-	commons := ph1.Seal([]byte("privacy-boost-phase1"))
 
 	// Load r1cs constraint system.
 	r1csFile, err := os.Open(r1csPath)
@@ -47,38 +40,33 @@ func ExportKeysFromPhase2(
 		return err
 	}
 
-	// Deserialize all contribution artifacts in order.
-	contribs := make([]*mpcsetup.Phase2, 0, len(contributionPhase2Paths))
+	// Stream the contribution chain, retaining only the previous and next Phase2
+	// object at any time. This inlines mpcsetup.VerifyPhase2's own logic
+	// (Initialize -> pairwise Verify -> Seal) one contribution at a time instead of
+	// requiring the full chain materialized up front, so peak retention is O(1)
+	// rather than O(len(contributionPhase2Paths)).
+	prev := new(mpcsetup.Phase2)
+	evals := prev.Initialize(&r1cs, &commons)
 	for _, phase2Path := range contributionPhase2Paths {
-		phase2File, err := os.Open(phase2Path)
+		next, err := readPhase2Artifact(phase2Path)
 		if err != nil {
 			return err
 		}
-
-		// Compute values for the next processing step.
-		p2 := new(mpcsetup.Phase2)
-		if _, err := p2.ReadFrom(phase2File); err != nil {
-			phase2File.Close()
+		if err := prev.Verify(next); err != nil {
 			return err
 		}
-		// Close the file handle after use.
-		phase2File.Close()
-
-		// Append the item to the accumulated collection.
-		contribs = append(contribs, p2)
+		prev = next
 	}
 
-	// Verify chain and extract proving/verifying keys.
-	pk, vk, err := mpcsetup.VerifyPhase2(&r1cs, &commons, nil, contribs...)
-	if err != nil {
-		return err
-	}
+	// Seal the final contribution and extract proving/verifying keys.
+	pk, vk := prev.Seal(&commons, &evals, nil)
 
 	// Return the computed result to the caller.
 	return writeKeys(pk, vk, pkOutPath, vkOutPath)
 }
 
 // ExportKeysFromPhase2WithCachedEvaluations uses setup-time cached evaluations to skip re-initialize.
+// cache may be nil; see ExportKeysFromPhase2 for the shared-cache contract.
 func ExportKeysFromPhase2WithCachedEvaluations(
 	phase1Path,
 	originPhase2Path string,
@@ -86,27 +74,17 @@ func ExportKeysFromPhase2WithCachedEvaluations(
 	evals *mpcsetup.Phase2Evaluations,
 	pkOutPath,
 	vkOutPath string,
+	cache *Phase1Cache,
 ) error {
 	// Evaluate the guard condition for this branch.
 	if evals == nil {
 		return fmt.Errorf("cached evaluations are required")
 	}
 
-	// Load phase1 artifact and seal commons.
-	phase1File, err := os.Open(phase1Path)
+	commons, err := resolveCommons(cache, phase1Path)
 	if err != nil {
 		return err
 	}
-	defer phase1File.Close()
-
-	// Declare local variables used in this stage.
-	var ph1 mpcsetup.Phase1
-	if _, err := ph1.ReadFrom(phase1File); err != nil {
-		return err
-	}
-
-	// Compute values for the next processing step.
-	commons := ph1.Seal([]byte("privacy-boost-phase1"))
 
 	// Load origin phase2 and walk contribution chain.
 	origin, err := readPhase2Artifact(originPhase2Path)

@@ -119,6 +119,7 @@ func TestVerifyDerivesKeysFromTranscript(t *testing.T) {
 		[]string{contribPath},
 		pkPath,
 		vkPath,
+		nil,
 	); err != nil {
 		t.Fatalf("export keys: %v", err)
 	}
