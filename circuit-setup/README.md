@@ -42,3 +42,7 @@ input/output `.ph2` artifacts are kept in the state directory. If you answer
 ```bash
 CGO_ENABLED=0 go build -o ./bin/ceremony ./cmd/ceremony
 ```
+
+## Native production round
+
+The active `production.ceremony.config.json` is the exact numbered Round 4 preset, `production.ceremony.2026-04.config.json`. It selects 19 native configurations and excludes retired s12, s25, m8 and l6. Setup and finalization each use one worker. All selected native relations use new keys, including deposit and portal. The numbered Round 1, 2 and 3 presets preserve their historical bytes. The rehearsal preset uses the same selected shapes in separate disposable state.

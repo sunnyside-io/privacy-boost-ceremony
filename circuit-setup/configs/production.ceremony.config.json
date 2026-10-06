@@ -1,15 +1,16 @@
 {
-  "id": "prod-ceremony-2026-03",
-  "title": "Privacy Boost Production Ceremony (third round)",
-  "description": "Production public ceremony re-keying the signature-verifying shapes after the gnark v0.16.3 circuit upgrade",
+  "id": "prod-ceremony-2026-04",
+  "title": "Privacy Boost Production Ceremony (fourth round)",
+  "description": "Fourth production round for 19 native-address circuit configurations. Prior registry-ID keys are incompatible. Retired s12, s25, m8 and l6 are excluded.",
   "accessMode": "public",
   "production": true,
-  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-03",
+  "stateDir": "./circuit-setup/.state/prod-ceremony-2026-04",
   "server": {
     "listenAddr": "127.0.0.1:8787",
     "sessionTtlMinutes": 60,
     "contributionLeaseTtlMinutes": 20,
-    "setupMaxWorkers": 12
+    "setupMaxWorkers": 1,
+    "finalizeMaxWorkers": 1
   },
   "githubAuth": {
     "enabled": true,
@@ -41,7 +42,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "s5",
@@ -54,7 +56,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "m1",
@@ -67,7 +70,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "m4",
@@ -80,7 +84,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "l1",
@@ -93,7 +98,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "l3",
@@ -106,7 +112,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "sp1",
@@ -119,7 +126,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "w51",
@@ -132,7 +140,8 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "w201",
@@ -145,18 +154,65 @@
       "authDepth": 20,
       "maxFeeTokens": 4,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "d1",
+      "name": "d1",
+      "type": "deposit",
+      "batchSize": 1,
+      "depth": 24,
+      "maxTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "d4",
+      "name": "d4",
+      "type": "deposit",
+      "batchSize": 4,
+      "depth": 24,
+      "maxTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "d14",
+      "name": "d14",
+      "type": "deposit",
+      "batchSize": 14,
+      "depth": 24,
+      "maxTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "p1",
+      "name": "p1",
+      "type": "portal",
+      "batchSize": 1,
+      "depth": 24,
+      "maxTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "p6",
+      "name": "p6",
+      "type": "portal",
+      "batchSize": 6,
+      "depth": 24,
+      "maxTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "f13",
       "name": "f13",
       "type": "forced",
-      "batchSize": 13,
+      "batchSize": 1,
       "maxInputs": 13,
       "depth": 24,
       "authDepth": 20,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "g1",
@@ -166,7 +222,8 @@
       "depth": 24,
       "authDepth": 20,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
     },
     {
       "id": "g3",
@@ -176,7 +233,26 @@
       "depth": 24,
       "authDepth": 20,
       "maxTrees": 16,
-      "maxAuthTrees": 16
+      "maxAuthTrees": 16,
+      "assetFormat": "erc20-address-v1"
+    },
+    {
+      "id": "note-migration-v1-3",
+      "name": "note-migration-v1-3",
+      "type": "note_migration",
+      "assetFormat": "erc20-address-v1",
+      "batchSize": 3,
+      "depth": 24,
+      "maxTrees": 16
+    },
+    {
+      "id": "note-migration-v1-16",
+      "name": "note-migration-v1-16",
+      "type": "note_migration",
+      "assetFormat": "erc20-address-v1",
+      "batchSize": 16,
+      "depth": 24,
+      "maxTrees": 16
     }
   ]
 }

@@ -2,6 +2,7 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -547,20 +548,9 @@ func runContribute(args []string) error {
 	// choose whether to persist a local receipt at the end of the run.
 	fmt.Println("  Save a receipt file? After the ceremony is finalized, you can use")
 	fmt.Println("  it to verify your contributions are included in the published bundle.")
-	var saveReceipt bool
-	for {
-		fmt.Print("  Save receipt? [y/n]: ")
-		var answer string
-		fmt.Scanln(&answer)
-		answer = strings.TrimSpace(strings.ToLower(answer))
-		if answer == "y" || answer == "yes" {
-			saveReceipt = true
-			break
-		} else if answer == "n" || answer == "no" {
-			saveReceipt = false
-			break
-		}
-		fmt.Println("  Please enter y or n.")
+	saveReceipt, err := readReceiptPreference(os.Stdin)
+	if err != nil {
+		return err
 	}
 	if saveReceipt {
 		// The saved receipt now uses the richer local metadata format even
@@ -590,6 +580,29 @@ func runContribute(args []string) error {
 	fmt.Println("")
 
 	return nil
+}
+
+// A closed input must preserve local contribution artifacts rather than loop
+// forever or silently choose the branch that removes them.
+func readReceiptPreference(input io.Reader) (bool, error) {
+	scanner := bufio.NewScanner(input)
+	for {
+		fmt.Print("  Save receipt? [y/n]: ")
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return false, fmt.Errorf("read receipt preference: %w", err)
+			}
+			return false, errors.New("receipt preference input ended before y/n")
+		}
+		switch strings.ToLower(strings.TrimSpace(scanner.Text())) {
+		case "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		default:
+			fmt.Println("  Please enter y or n.")
+		}
+	}
 }
 
 // writeContributionReceipt persists the contributor's local audit record to disk.
