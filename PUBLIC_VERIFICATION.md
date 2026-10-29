@@ -42,7 +42,7 @@ Re-derived keys are created in a temporary directory and deleted after verificat
 
 ### 1. Download and extract the public bundle
 
-The example below is for round two. Round three finalized on 2026-09-23. Its [round record](rounds/2026-03.md) pins the final archive, manifest and bundle-root digests, but does not yet list a public download URL. Use the record matching the bundle you are verifying.
+The example below is for round two. Round three finalized on 2026-09-23. Its [round record](rounds/2026-03.md) pins the final archive, manifest and bundle-root digests and lists its download at https://file.ceremony.privacyboost.io/prod-20260923-public.tar.gz. Use the record matching the bundle you are verifying.
 
 ```bash
 curl -LO https://file.ceremony.privacyboost.io/prod-20260902-public.tar

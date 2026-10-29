@@ -14,7 +14,12 @@ Three production ceremony rounds have finalized. Each one is recorded under [`ro
 
 `main` always carries the current round's config. Past rounds stay reachable through their own record above and through the release tag they ran under.
 
-**Downloads for the first two rounds** are listed below. Round three is finalized, but its public download URL is not recorded here yet.
+**Downloads** for each round are listed below.
+
+Third round, `prod-ceremony-2026-03`, 12 circuits and 192 contributions:
+
+- **Public bundle:** https://file.ceremony.privacyboost.io/prod-20260923-public.tar.gz
+- **Keys:** https://file.ceremony.privacyboost.io/prod-20260923-keys.tar.gz
 
 Second round, `prod-ceremony-2026-02`, 21 circuits and 490 contributions:
 
